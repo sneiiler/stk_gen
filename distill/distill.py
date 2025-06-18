@@ -71,11 +71,8 @@ class DataDistiller:
         self.client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
         self.model_name = model_name
         self.system_prompt = (
-            "你是一个专门用于卫星分簇的AI助手。你需要根据输入的卫星数据，按照要求进行分簇并输出结果。"
+            "你是一个专攻解决复杂优化和图论问题的AI专家。你的任务是扮演一个动态卫星集群的求解器。根据给定的卫星状态、星间链路和对地观测数据，解决大规模星座在分组观测动态目标时的动态分簇问题。你需要将一组卫星（Satellites）划分成多个最优的簇（Clusters），以高效地完成对一组目标（Targets）的观测任务。"
         )
-
-        # 基础指令模板
-        self.instruction_template = """你是一个专攻解决复杂优化和图论问题的AI专家。你的任务是扮演一个动态卫星集群的求解器。根据给定的卫星状态、星间链路和对地观测数据，解决大规模星座在分组观测动态目标时的动态分簇问题。你需要将一组卫星（Satellites）划分成多个最优的簇（Clusters），以高效地完成对一组目标（Targets）的观测任务。"""
 
     def generate_prompt(self, data: Dict) -> List[ChatCompletionMessageParam]:
         """生成提示消息。
@@ -158,7 +155,7 @@ class DataDistiller:
 ```
 
 **Output Data Schema:**
-你的输出必须严格遵守以下JSON结构，并包含一个详细的思考过程。
+你的输出必须严格遵守以下JSON结构，并包含一个详细的思考过程。重要：使用中文回答。
 
 - **`<|chain_of_thought|>`**: 你需要用清晰的、分步数字编号表明步骤，解释如何得到最终分簇结果，长度不应当超过500字。应当考虑当前的策略，进行观测关系、连通关系的数据洞察、主节点评估候选以及分析簇的形成过程，以及其他合理的分析过程，并最后按簇总结最后的决策为什么是最优的。
 - **`<|result|>`**: 在这个部分，提供最终的JSON结果数组。
@@ -232,7 +229,7 @@ class DataDistiller:
         # 确保输出目录存在
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_file, "w", encoding="utf-8") as f:
+        with open(output_file, "a", encoding="utf-8") as f:
             for data in tqdm(batch_data, desc="处理数据批次"):
                 try:
                     messages = self.generate_prompt(data)
@@ -254,7 +251,7 @@ class DataDistiller:
 
                     # 构造Alpaca格式的训练数据
                     alpaca_data = {
-                        "instruction": self.instruction_template,
+                        "instruction": messages,
                         "input": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
                         "output": json.dumps(formatted_output, ensure_ascii=False, separators=(",", ":")),
                     }
