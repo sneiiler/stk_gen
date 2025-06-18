@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <UnitConversion Label="radians" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="radian" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="rads" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="rad" Multiplier="1" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="degrees" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="degree" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="degs" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="deg" Multiplier="0.0174532925" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+</UnitConversions>

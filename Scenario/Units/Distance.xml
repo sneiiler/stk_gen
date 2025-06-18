@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <UnitConversion Label="m" Multiplier="1" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="meter" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="meters" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="ft" Multiplier="0.3048" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="feet" Multiplier="0.3048" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="foot" Multiplier="0.3048" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="in" Multiplier="0.0254" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="inches" Multiplier="0.0254" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="cm" Multiplier="0.01" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="km" Multiplier="1000" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="kilometer" Multiplier="1000" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="kilometers" Multiplier="1000" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="nmi" Multiplier="1852" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="nm" Multiplier="1852" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="nautical miles" Multiplier="1852" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="mile (nautical)" Multiplier="1852" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="mi" Multiplier="1609.34" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="statute miles" Multiplier="1609.34" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+</UnitConversions>

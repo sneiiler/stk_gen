@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <UnitConversion Label="radian per second squared" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="radians per second squared" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="rad per sec squared" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="rad/sec^2" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="rad/sc^2" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="rad/s^2" Multiplier="1" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="degree per second squared" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="degrees per second squared" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="deg per sec squared" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="deg/sec^2" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="deg/sc^2" Multiplier="0.0174532925" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="deg/s^2" Multiplier="0.0174532925" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+</UnitConversions>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <UnitConversion Label="Hertz" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="GHz" Multiplier="1000000000" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="MegaHz" Multiplier="1000000" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="MegaHertz" Multiplier="1000000" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="kHz" Multiplier="1000" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="Hz" Multiplier="1" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+</UnitConversions>

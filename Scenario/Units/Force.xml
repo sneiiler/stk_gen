@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <UnitConversion Label="lbf" Multiplier="1" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="n" Multiplier="0.224809" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="newton" Multiplier="0.224809" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="kn" Multiplier="224.809" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="kilonewton" Multiplier="224.809" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+  <UnitConversion Label="kgf" Multiplier="2.20462" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
+</UnitConversions>

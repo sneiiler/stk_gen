@@ -1,0 +1,65 @@
+stk.v.12.0
+WrittenBy    STK_v12.2.0
+
+BEGIN Constellation
+
+    Name		 sate
+    BEGIN Definition
+
+        Object		 Satellite/Satellite111
+        Object		 Satellite/Satellite112
+        Object		 Satellite/Satellite113
+        Object		 Satellite/Satellite114
+        Object		 Satellite/Satellite115
+        Object		 Satellite/Satellite116
+        Object		 Satellite/Satellite121
+        Object		 Satellite/Satellite122
+        Object		 Satellite/Satellite123
+        Object		 Satellite/Satellite124
+        Object		 Satellite/Satellite125
+        Object		 Satellite/Satellite126
+        Object		 Satellite/Satellite131
+        Object		 Satellite/Satellite132
+        Object		 Satellite/Satellite133
+        Object		 Satellite/Satellite134
+        Object		 Satellite/Satellite135
+        Object		 Satellite/Satellite136
+        Object		 Satellite/Satellite141
+        Object		 Satellite/Satellite142
+        Object		 Satellite/Satellite143
+        Object		 Satellite/Satellite144
+        Object		 Satellite/Satellite145
+        Object		 Satellite/Satellite146
+        Object		 Satellite/Satellite151
+        Object		 Satellite/Satellite152
+        Object		 Satellite/Satellite153
+        Object		 Satellite/Satellite154
+        Object		 Satellite/Satellite155
+        Object		 Satellite/Satellite156
+        Object		 Satellite/Satellite161
+        Object		 Satellite/Satellite162
+        Object		 Satellite/Satellite163
+        Object		 Satellite/Satellite164
+        Object		 Satellite/Satellite165
+        Object		 Satellite/Satellite166
+        Type		 Constellation
+        FromOperator		 Or
+        FromOrder		 1
+        ToOperator		 Or
+        ToOrder		 1
+        ToParentConstraint		 AnyParent
+        FromParentConstraint		 AnyParent
+
+    END Definition
+
+    BEGIN Extensions
+
+        BEGIN ADFFileData
+        END ADFFileData
+
+        BEGIN Desc
+        END Desc
+
+    END Extensions
+
+END Constellation

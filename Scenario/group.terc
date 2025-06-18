@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DataCollection xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <RangeLoaded>false</RangeLoaded>
+  <KmlDocCount>0</KmlDocCount>
+  <Version>2.1.0.0</Version>
+  <CompassIsVisible>false</CompassIsVisible>
+  <RangeRings />
+  <IncludeExternalFiles>true</IncludeExternalFiles>
+  <Children />
+  <CurrentObjectType>Unknown</CurrentObjectType>
+</DataCollection>
