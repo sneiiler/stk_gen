@@ -70,9 +70,9 @@ class DataDistiller:
         """
         self.client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
         self.model_name = model_name
-        self.system_prompt = (
-            "你是一个专攻解决复杂优化和图论问题的AI专家。你的任务是扮演一个动态卫星集群的求解器。根据给定的卫星状态、星间链路和对地观测数据，解决大规模星座在分组观测动态目标时的动态分簇问题。你需要将一组卫星（Satellites）划分成多个最优的簇（Clusters），以高效地完成对一组目标（Targets）的观测任务。"
-        )
+        self.system_prompt = "你是一个专攻解决复杂优化和图论问题的AI专家。你的任务是扮演一个动态卫星集群的求解器。根据给定的卫星状态、星间链路和对地观测数据，解决大规模星座在分组观测动态目标时的动态分簇问题。你需要将一组卫星（Satellites）划分成多个最优的簇（Clusters），以高效地完成对一组目标（Targets）的观测任务。"
+
+        # 基础指令模板
 
     def generate_prompt(self, data: Dict) -> List[ChatCompletionMessageParam]:
         """生成提示消息。
@@ -103,12 +103,12 @@ class DataDistiller:
   3. 观测能力强（相关 `target_edges.q` 之和）
 
 **3. 分簇策略 (`strategy`):**
-- 当`strategy`为 "balance": 为每个被观测的目标分配一个核心观测卫星
+- 当`strategy`为 "balance": 首先确保每个目标都被观测到。为每个被观测的目标分配一个核心观测卫星，核心观测卫星尽可能不重复
   - **逻辑**:
     1. 识别所有可被观测的目标
-    2. 对每个目标，从能观测它的卫星中选择观测质量`q`最高的作为核心观测者
+    2. 对每个目标，从能观测它的卫星中选择观测质量`q`最高的作为核心观测者，如果当前观测者已经被占用，则选择次优观测者
     3. 如果多个目标的最优观测卫星之间能通过≤2跳互联，将它们组成一个簇
-    4. 不要求所有卫星都参与组簇，保证资源有效利用
+    4. 星簇的卫星数量应尽可能接近目标的数量
 
 - 当`strategy`为 "quality": 尽可能多地利用可用卫星，形成高质量、高韧性的观测簇
   - **逻辑**:
@@ -121,38 +121,10 @@ class DataDistiller:
     3. 如果某个簇内卫星间的连通性超过2跳，考虑将其拆分为多个簇
 
 **关键原则：**
-1. 保持簇的紧凑性：簇内卫星必须通过≤2跳实现互联
-2. 避免过度分簇：只在确实需要时才创建新的簇
-3. 确保资源利用效率：不强制要求所有卫星都必须参与分簇
-
-**Input Data Schema:**
-```json
-{{
-  "timestamp": "string",  // 数据快照的时间戳
-  "strategy": "string",   // 分簇策略，'balance' 或 'quality'
-  "sat_attrs": [         // 参与分簇的卫星属性列表
-    {{
-      "id": "integer",    // 卫星唯一ID
-      "health": "integer", // 卫星健康度 (0.0-1.0, 越高越好)
-      "pos": ["float", "float", "float"]  // 卫星位置坐标 (可选)
-    }}
-  ],
-  "sat_edges": [         // 卫星间通信链路列表
-    {{
-      "from": "integer",  // 卫星A的ID
-      "to": "integer",    // 卫星B的ID
-      "w": "float"       // 链路强度 (0.0-1.0, 越大越好)
-    }}
-  ],
-  "target_edges": [      // 卫星对目标的观测能力列表
-    {{
-      "from": "integer",  // 卫星ID
-      "to": "integer",    // 目标ID
-      "q": "float"       // 观测质量 (0.0-1.0, 越大越好)
-    }}
-  ]
-}}
-```
+1. 保持簇的紧凑性：簇内主节点的卫星到任意一颗成员卫星的跳数应该≤3，否则重新分簇
+2. 避免过度分簇：只在确实需要时才创建新的簇，但通常来说一个星簇内的卫星不应该超过10个
+3. 确保资源利用效率：不强制要求所有卫星都必须参与分簇，但是确保每个目标都被观测到。
+4. 不要遗漏对任何一个可见目标的观测
 
 **Output Data Schema:**
 你的输出必须严格遵守以下JSON结构，并包含一个详细的思考过程。重要：使用中文回答。
@@ -175,15 +147,31 @@ class DataDistiller:
 ]
 <|EOF|>
 ```
-
 **现在给你的输入数据为：**
-{json.dumps(data, ensure_ascii=False, indent=2)}
+{json.dumps(data, ensure_ascii=False, separators=(",", ":"))}
 请输出：
 """
 
+        # 删除回车符和多余空格以节省token
+        def clean_text(text: str) -> str:
+            """清理文本中的多余空白字符"""
+            # 1. 替换回车符和换行符为空格
+            text = text.replace('\n', ' ').replace('\r', ' ')
+            # 2. 替换制表符为空格
+            text = text.replace('\t', ' ')
+            # 3. 合并多个连续空格为单个空格
+            import re
+            text = re.sub(r'\s+', ' ', text)
+            # 4. 删除首尾空白
+            text = text.strip()
+            return text
+        
+        system_prompt_clean = clean_text(self.system_prompt)
+        prompt_content_clean = clean_text(prompt_content)
+        
         resp: List[ChatCompletionMessageParam] = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": prompt_content},
+            {"role": "system", "content": system_prompt_clean},
+            {"role": "user", "content": prompt_content_clean},
         ]
         # ic(resp)
         return resp
@@ -250,8 +238,12 @@ class DataDistiller:
                     }
 
                     # 构造Alpaca格式的训练数据
+                    # 消息内容已在generate_prompt时清理过回车符
+                    system_content = str(messages[0].get("content", ""))
+                    user_content = str(messages[1].get("content", ""))
+                    
                     alpaca_data = {
-                        "instruction": messages,
+                        "instruction": system_content + user_content,
                         "input": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
                         "output": json.dumps(formatted_output, ensure_ascii=False, separators=(",", ":")),
                     }
