@@ -121,3 +121,28 @@ def measure_time(func):
         return result
 
     return wrapper
+
+
+def validate_jsonl_file(file_path):
+    """Check if a jsonl file is valid line by line.
+
+    Args:
+        file_path (str): Path to the jsonl file.
+
+    Returns:
+        bool: True if all lines are valid JSON, False otherwise.
+        list: List of line numbers with errors.
+    """
+    # 逐行校验jsonl文件格式
+    import json
+    error_lines = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for idx, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue  # 跳过空行
+            try:
+                json.loads(line)
+            except Exception:
+                error_lines.append(idx)
+    return len(error_lines) == 0, error_lines
