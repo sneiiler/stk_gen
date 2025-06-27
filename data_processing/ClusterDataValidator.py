@@ -5,9 +5,9 @@
 """
 
 import sys
-sys.path.append('/home/kaifeng/code/stk_gen')
+sys.path.append('/root/stk_gen')
 from typing import Dict, Any, List, Set, Tuple, Optional
-import json
+import json,re
 import logging  
 from pydantic import BaseModel
 from utils.misc_utils import get_data_dir
@@ -392,11 +392,51 @@ class ClusterDataValidator:
                     f"集群 {cluster.get('cluster_id')} 平均健康度较低: {avg_health:.3f}"
                 )
 
+def load_data(file_path: str) -> List[Dict[str, Any]]:
+    """加载数据
+    
+    Args:
+        file_path: 数据文件路径
+        
+    Returns:
+        数据列表
+    """
+    raw_data = []
+    input_user_data = []
+    output_resoning_data = []
+    output_result_data = []
+    
+    with open(file_path, "r", encoding='utf-8') as file:
+        for line in file:
+            # 移除行尾的换行符
+            cleaned_line = line.strip()
+            if cleaned_line:  # 确保非空行
+                # 解析JSON
+                data = json.loads(cleaned_line)
+                raw_data.append(data)
+
+    for line_data in raw_data:
+        for message in line_data:
+            if message['role'] == "user":
+                input_user_data.append(message['content'])
+            if message['role'] == "assistant":
+                # 使用正则表达式匹配 </thionk> 后面到下一个 ``` 之间的内容
+                pattern = r'<think>(.*?)</think>(.*?)\[(.*)\]$$'
+                match = re.search(pattern, message['content'], re.DOTALL)
+                if match:
+                    try:
+                        output_resoning_data.append(match.group(1))
+                        output_result_data.append(json.loads("["+match.group(3)+"]"))
+                    except json.JSONDecodeError as e:
+                        print("JSON 解析失败:", e)
+                        return None
+    
+
 def main():
-    data_path = get_data_dir() / "distilled_training_data_v20250626_sharegpt_format_v2.json"
-    input_data = json.load(data_path)
-    print(input_data[1])
+    data_path = get_data_dir() / "distilled_training_data_v20250626_sharegpt_format_v2.jsonl"
+    load_data(data_path)
 
 
 if __name__ == "__main__":
     main()
+    print("Done.")
