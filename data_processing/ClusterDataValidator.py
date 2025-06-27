@@ -4,20 +4,21 @@
 该模块提供了用于验证大模型生成的卫星分簇结果的验证器类。
 """
 
+import sys
+sys.path.append('/root/stk_gen')
 from typing import Dict, Any, List, Set, Tuple, Optional
-import json
+import json,re
 import logging  
 from pydantic import BaseModel
+from utils.misc_utils import get_data_dir
 
 class ValidationResult(BaseModel):
-    """验证结果数据类"""
-    is_valid: bool
-    errors: List[str]
-    warnings: List[str]
-    details: Dict[str, Any]
+    is_valid:bool
+    errors:List[str]
+    warnings:List[str]
+    details:Dict[str,Any]
 
-
-class SatelliteClusterValidator:
+class ClusterDataValidator:
     """卫星分簇结果验证器
     
     用于验证大模型生成的卫星分簇结果是否符合业务规则和约束条件。
@@ -31,12 +32,10 @@ class SatelliteClusterValidator:
         """
         self.logger = logger or logging.getLogger(__name__)
     
-    def validate_output(self, output: Dict[str, Any], input_data: Dict[str, Any]) -> ValidationResult:
+    def validate_output(self, input_data: Dict[str, Any]):
         """验证输出结果
         
         Args:
-            output: LLM输出结果，包含clusters字段
-            input_data: 原始输入数据，包含sat_attrs、sat_edges、target_edges等
             
         Returns:
             验证结果，包含验证状态、错误信息和警告信息
@@ -50,7 +49,7 @@ class SatelliteClusterValidator:
         
         try:
             # 1. 基础格式验证
-            self._validate_basic_format(output, validation_result)
+            self._validate_basic_format(input_data, validation_result)
             if not validation_result.is_valid:
                 return validation_result
             
@@ -392,80 +391,52 @@ class SatelliteClusterValidator:
                 result.warnings.append(
                     f"集群 {cluster.get('cluster_id')} 平均健康度较低: {avg_health:.3f}"
                 )
-    
-    def generate_validation_report(self, validation_result: ValidationResult) -> str:
-        """生成验证报告
-        
-        Args:
-            validation_result: 验证结果
-            
-        Returns:
-            格式化的验证报告字符串
-        """
-        report = []
-        report.append("=" * 50)
-        report.append("卫星分簇结果验证报告")
-        report.append("=" * 50)
-        
-        # 总体状态
-        status = "✅ 通过" if validation_result.is_valid else "❌ 失败"
-        report.append(f"验证状态: {status}")
-        report.append("")
-        
-        # 错误信息
-        if validation_result.errors:
-            report.append("❌ 错误信息:")
-            for error in validation_result.errors:
-                report.append(f"  - {error}")
-            report.append("")
-        
-        # 警告信息
-        if validation_result.warnings:
-            report.append("⚠️ 警告信息:")
-            for warning in validation_result.warnings:
-                report.append(f"  - {warning}")
-            report.append("")
-        
-        # 详细信息
-        if validation_result.details:
-            report.append("📊 详细信息:")
-            for key, value in validation_result.details.items():
-                if isinstance(value, dict):
-                    report.append(f"  {key}:")
-                    for sub_key, sub_value in value.items():
-                        report.append(f"    {sub_key}: {sub_value}")
-                else:
-                    report.append(f"  {key}: {value}")
-            report.append("")
-        
-        report.append("=" * 50)
-        return "\n".join(report)
 
-
-def validate_satellite_clustering(output: Dict[str, Any], input_data: Dict[str, Any], 
-                                logger: Optional[logging.Logger] = None) -> ValidationResult:
-    """便捷函数：验证卫星分簇结果
+def load_data(file_path: str) -> List[Dict[str, Any]]:
+    """加载数据
     
     Args:
-        output: LLM输出结果
-        input_data: 原始输入数据
-        logger: 日志记录器
+        file_path: 数据文件路径
         
     Returns:
-        验证结果
+        数据列表
     """
-    validator = SatelliteClusterValidator(logger)
-    return validator.validate_output(output, input_data)
-
-
-def generate_report(validation_result: ValidationResult) -> str:
-    """便捷函数：生成验证报告
+    raw_data = []
+    input_user_data = []
+    output_resoning_data = []
+    output_result_data = []
     
-    Args:
-        validation_result: 验证结果
-        
-    Returns:
-        格式化的验证报告
-    """
-    validator = SatelliteClusterValidator()
-    return validator.generate_validation_report(validation_result)
+    with open(file_path, "r", encoding='utf-8') as file:
+        for line in file:
+            # 移除行尾的换行符
+            cleaned_line = line.strip()
+            if cleaned_line:  # 确保非空行
+                # 解析JSON
+                data = json.loads(cleaned_line)
+                raw_data.append(data)
+
+    for line_data in raw_data:
+        for message in line_data:
+            if message['role'] == "user":
+                input_user_data.append(message['content'])
+            if message['role'] == "assistant":
+                # 使用正则表达式匹配 </thionk> 后面到下一个 ``` 之间的内容
+                pattern = r'<think>(.*?)</think>(.*?)\[(.*)\]$$'
+                match = re.search(pattern, message['content'], re.DOTALL)
+                if match:
+                    try:
+                        output_resoning_data.append(match.group(1))
+                        output_result_data.append(json.loads("["+match.group(3)+"]"))
+                    except json.JSONDecodeError as e:
+                        print("JSON 解析失败:", e)
+                        return None
+    
+
+def main():
+    data_path = get_data_dir() / "distilled_training_data_v20250626_sharegpt_format_v2.jsonl"
+    load_data(data_path)
+
+
+if __name__ == "__main__":
+    main()
+    print("Done.")

@@ -1,5 +1,5 @@
-pypiwin32==223
-pyproj>=3.6.0
+# pypiwin32==223
+# pyproj>=3.6.0
 matplotlib>=3.7.0
 numpy>=1.24.0
 pandas>=2.0.0
