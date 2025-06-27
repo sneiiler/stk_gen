@@ -9,7 +9,7 @@ import math
 import time
 from datetime import datetime
 
-import pyproj
+# import pyproj
 import icecream
 import matplotlib.pyplot as plt
 
@@ -74,23 +74,23 @@ def ecef_distance(p1, p2):
     return distance
 
 
-def ecef2lla(x, y, z):
-    """
-    根据地心地固系xyz坐标，转为经纬高
-    Args:
-        x: 心地固系xyz坐标
-        y: 心地固系xyz坐标
-        z: 心地固系xyz坐标
+# def ecef2lla(x, y, z):
+#     """
+#     根据地心地固系xyz坐标，转为经纬高
+#     Args:
+#         x: 心地固系xyz坐标
+#         y: 心地固系xyz坐标
+#         z: 心地固系xyz坐标
 
-    Returns:
-        经纬高
-    """
-    transformer = pyproj.Transformer.from_crs(
-        {"proj": "geocent", "ellps": "WGS84", "dataum": "WGS84"},
-        {"proj": "latlon", "ellps": "WGS84", "dataum": "WGS84"},
-    )
-    lon, lat, alt = transformer.transform(x, y, z, radians=False)
-    return lat, lon, alt
+#     Returns:
+#         经纬高
+#     """
+#     transformer = pyproj.Transformer.from_crs(
+#         {"proj": "geocent", "ellps": "WGS84", "dataum": "WGS84"},
+#         {"proj": "latlon", "ellps": "WGS84", "dataum": "WGS84"},
+#     )
+#     lon, lat, alt = transformer.transform(x, y, z, radians=False)
+#     return lat, lon, alt
 
 
 def lla2ecef(lat, lon, h):
