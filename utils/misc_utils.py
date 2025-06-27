@@ -20,13 +20,13 @@ def get_project_root() -> Path:
         Path: 项目根目录的Path对象
 
     Note:
-        通过查找pyproject.toml文件来确定项目根目录
+        通过查找requirements.txt文件来确定项目根目录
         如果找不到，则返回当前文件的上上级目录作为备选
     """
-    # 从当前文件位置向上查找，直到找到包含pyproject.toml的目录
+    # 从当前文件位置向上查找，直到找到包含requirements.txt的目录
     current_dir = Path(__file__).parent
     while current_dir != current_dir.parent:
-        if (current_dir / "pyproject.toml").exists():
+        if (current_dir / "requirements.txt").exists():
             return current_dir
         current_dir = current_dir.parent
     return Path(__file__).parent.parent  # 如果没找到，返回当前文件的上上级目录

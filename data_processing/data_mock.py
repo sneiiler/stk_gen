@@ -18,7 +18,7 @@ def generate_dataset(timestamp):
         dict: A dataset containing timestamp, strategy, sat_attrs, sat_edges, and target_edges.
     """
     # 随机选择策略
-    strategy = random.choice(["balance", "quailty"])
+    strategy = random.choice(["balanced", "quality"])
     
     # 生成卫星-卫星可见性边
     sat_edges = []
@@ -67,7 +67,7 @@ for i in range(200):
 
 # 写入到data目录下的mock_satellite_observation_data_时间戳.json文件
 file_ts = get_current_timestamp()
-output_path = get_data_dir() / f"mock_satellite_observation_data_{file_ts}.json"
+output_path = get_data_dir() / f"mock_satellite_observation_data_{file_ts}_v2.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(datasets, f, ensure_ascii=False, indent=2)
 
