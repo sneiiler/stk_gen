@@ -5,6 +5,7 @@ This module implements a data distillation system using LangChain and OpenAI API
 It provides functionality for batch processing and optimizing training data with
 better output parsing capabilities.
 """
+
 import os
 import sys
 from pathlib import Path
@@ -23,13 +24,21 @@ from openai import OpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from tqdm import tqdm
-from icecream import ic,install
+from icecream import ic, install
+
 install()
 
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
-from data_models.sft_data_models import ClusterInfo, RawConstellationDataModel, SatelliteClusterOutput, ShareGPTFormat, ShareGPTMessage
+from data_models.sft_data_models import (
+    ClusterInfo,
+    RawConstellationDataModel,
+    SatelliteClusterOutput,
+    ShareGPTFormat,
+    ShareGPTMessage,
+)
 from dotenv import load_dotenv
+
 env_path = get_project_root() / ".env"
 load_dotenv(env_path)
 
@@ -38,6 +47,11 @@ api_key = os.getenv("OPENAI_COMPATIBLE_API_KEY")
 api_base = os.getenv("OPENAI_COMPATIBLE_API_BASE")
 api_base_deepseek = os.getenv("DEEPSEEK_API_BASE")
 api_key_deepseek = os.getenv("DEEPSEEK_API_KEY")
+
+api_base_gemini = os.getenv("GEMINI_API_BASE")
+api_key_gemini = os.getenv("GEMINI_API_KEY")
+
+print(f"api_key_gemini: {api_key_gemini}")
 
 
 if not api_key or not api_base:
@@ -55,7 +69,12 @@ class DataDistiller:
         output_parser: OpenAI API的输出解析器
     """
 
-    def __init__(self, model_name: str = "deepseek-reasoner", temperature: float = 0.1):
+    def __init__(
+        self,
+        model_name: str = "deepseek-reasoner",
+        temperature: float = 0.1,
+        proxy=None,
+    ):
         """初始化数据蒸馏器。
 
         Args:
@@ -66,17 +85,33 @@ class DataDistiller:
         self.model_name = model_name
         self.temperature = temperature
 
-        self.client = OpenAI(api_key=api_key_deepseek, base_url=api_base_deepseek)
-        
+        if proxy is not None:
+            # 使用代理
+            import httpx
+
+            httpx_client = httpx.Client(proxy=proxy)
+            ic(f"使用代理: {proxy}")
+            self.client = OpenAI(
+                api_key=api_key_gemini, base_url=api_base_gemini, http_client=httpx_client
+            )
+        else:
+            # 不使用代理
+            self.client = OpenAI(api_key=api_key_gemini, base_url=api_base_gemini)
+            # self.client = OpenAI(api_key=api_key_deepseek, base_url=api_base_deepseek)
+
         # 获取prompt模板
         self.prompt_template = ChatPromptTemplate.from_template(
             template=get_prompt_template("latest")
         )
-        
-        # 创建输出解析器
-        self.output_parser = PydanticOutputParser(pydantic_object=SatelliteClusterOutput)
 
-    def generate_distill_result(self, data: Dict[str, Any]) -> Tuple[SatelliteClusterOutput | None, str]:
+        # 创建输出解析器
+        self.output_parser = PydanticOutputParser(
+            pydantic_object=SatelliteClusterOutput
+        )
+
+    def generate_distill_result(
+        self, data: Dict[str, Any]
+    ) -> Tuple[SatelliteClusterOutput | None, str]:
         """生成提示消息。
 
         Args:
@@ -87,62 +122,74 @@ class DataDistiller:
         """
         # 格式化输入数据
         user_content = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-        user_content = user_content.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+        user_content = (
+            user_content.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+        )
         user_content = re.sub(r"\s+", " ", user_content)
-        
+
         # 获取格式说明
         input_instructions = RawConstellationDataModel.model_json_schema()
         format_instructions = self.output_parser.get_format_instructions()
-        
+
         # 生成完整提示
         system_prompt = self.prompt_template.format(
             input_instructions=input_instructions,
             output_format_instructions=format_instructions,
         )
-        system_prompt = system_prompt.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+        system_prompt = (
+            system_prompt.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+        )
         system_prompt = re.sub(r"\s+", " ", system_prompt)
 
         messages = [
-            {"role":"system","content":system_prompt.strip()},
-            {"role":"user","content":user_content.strip()}
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_content.strip()},
+        ]
+        
+        messages = [
+            {"role": "system", "content": "hello"},
+            {"role": "user", "content": ""},
         ]
 
         print(messages)
-        exit()
+        
 
 
-        response = self.client.chat.completions.create( # type: ignore
+        response = self.client.chat.completions.create(  # type: ignore
             model=self.model_name,
-            messages=messages, # type: ignore
+            reasoning_effort="low",
+            messages=messages,  # type: ignore
             stream=True,
-            max_tokens=5000
         )
 
         reasoning_content = ""
         content = ""
 
         for chunk in response:
-            if chunk.choices[0].delta.reasoning_content:
-                # reasoning_content += chunk.choices[0].delta.reasoning_content
-                print(chunk.choices[0].delta.reasoning_content,end="",flush=True)
-            else:
-                # content += chunk.choices[0].delta.content
-                print(chunk.choices[0].delta.content,end="",flush=True)
+            print(chunk.choices[0].delta)
+
+        # for chunk in response:
+        #     if chunk.choices[0].delta.reasoning_content:
+        #         reasoning_content += chunk.choices[0].delta.reasoning_content
+        #         print(chunk.choices[0].delta.reasoning_content, end="", flush=True)
+        #     else:
+        #         content += chunk.choices[0].delta.content
+        #         print(chunk.choices[0].delta.content, end="", flush=True)
 
         # ic(reasoning_content)
         # ic(content)
-        # exit()
+        exit()
         # 解析JSON输出
         try:
             # 直接使用output_parser解析，它会自动处理各种格式
             parsed_output = self.output_parser.parse(content)
-            
+
             # 提取思维链
             cot = parsed_output.chain_of_thought
             # 如果有reasoning_content，将其添加到思维链前面
             if reasoning_content:
                 cot = reasoning_content.strip() + "\n 思考过程总结为:" + cot
-            
+
             result = SatelliteClusterOutput(
                 chain_of_thought=cot,
                 clusters=[
@@ -150,20 +197,22 @@ class DataDistiller:
                         cluster_id=cluster.cluster_id,
                         master=cluster.master,
                         sats=cluster.sats,
-                        targets=cluster.targets
+                        targets=cluster.targets,
                     )
                     for cluster in parsed_output.clusters
-                ]
+                ],
             )
-            return result,system_prompt
+            return result, system_prompt
 
         except Exception as e:
             ic(f"解析输出失败: {str(e)}")
             ic(f"原始输出: {content}")
             ic(f"思维链内容: {reasoning_content}")
-            return None,system_prompt
+            return None, system_prompt
 
-    def create_sharegpt_format(self, instruction: str, input_data: str, output_data: str) -> ShareGPTFormat:
+    def create_sharegpt_format(
+        self, instruction: str, input_data: str, output_data: str
+    ) -> ShareGPTFormat:
         """创建ShareGPT格式的训练数据。
 
         Args:
@@ -176,20 +225,20 @@ class DataDistiller:
         """
         # 构建助手消息（包含输出）
         assistant_message = output_data
-        
+
         return ShareGPTFormat(
             messages=[
                 ShareGPTMessage(role="system", content=instruction),
                 ShareGPTMessage(role="user", content=input_data),
-                ShareGPTMessage(role="assistant", content=assistant_message)
+                ShareGPTMessage(role="assistant", content=assistant_message),
             ]
         )
 
     def process_batch(
-        self, 
-        batch_data: List[Dict[str, Any]], 
+        self,
+        batch_data: List[Dict[str, Any]],
         output_file: Path,
-        validation_enabled: bool = True
+        validation_enabled: bool = True,
     ) -> None:
         """批量处理数据并实时保存。
 
@@ -200,36 +249,38 @@ class DataDistiller:
         """
         # 确保输出目录存在
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # 统计信息
         stats = {
             "total": len(batch_data),
             "success": 0,
             "failed": 0,
-            "validation_errors": 0
+            "validation_errors": 0,
         }
 
         with open(output_file, "a", encoding="utf-8") as f:
             for i, data in enumerate(tqdm(batch_data, desc="处理数据批次")):
                 try:
                     # 处理数据
-                    result,system_prompt = self.generate_distill_result(data)
-                    
+                    result, system_prompt = self.generate_distill_result(data)
+
                     if result is None:
                         stats["failed"] += 1
                         continue
-                    
+
                     # 构造ShareGPT格式的训练数据
-                    input_str = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+                    input_str = json.dumps(
+                        data, ensure_ascii=False, separators=(",", ":")
+                    )
                     output_str = result.to_think_json()
-                    
+
                     sharegpt_data = self.create_sharegpt_format(
                         instruction=system_prompt,
                         input_data=input_str,
-                        output_data=output_str
+                        output_data=output_str,
                     )
                     # 实时写入文件
-                    f.write(sharegpt_data.model_dump_json() + "\n")  
+                    f.write(sharegpt_data.model_dump_json() + "\n")
                     f.flush()  # 确保立即写入磁盘
 
                     stats["success"] += 1
@@ -239,13 +290,15 @@ class DataDistiller:
                     # 记录错误数据
                     error_data = {
                         "error": str(e),
-                        "data": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
-                        "sample_index": i
+                        "data": json.dumps(
+                            data, ensure_ascii=False, separators=(",", ":")
+                        ),
+                        "sample_index": i,
                     }
                     f.write(json.dumps(error_data, ensure_ascii=False) + "\n")
                     f.flush()
                     exit()
-        
+
         # 打印统计信息
         ic(f"处理完成统计: {stats}")
 
@@ -267,13 +320,17 @@ def load_json_data(file_path: Path) -> List[Dict[str, Any]]:
 def main():
     """主函数。"""
     # 从JSON文件加载数据
-    input_file = get_data_dir() / "mock_satellite_observation_data_20250627_093341_v2.json"
+    input_file = (
+        get_data_dir() / "mock_satellite_observation_data_20250627_093341_v2.json"
+    )
     batch_data = load_json_data(input_file)
-    
+
     ic(f"加载了 {len(batch_data)} 个数据样本")
 
     # 初始化蒸馏器
-    distiller = DataDistiller()
+    proxy = "socks5://127.0.0.1:1089"
+
+    distiller = DataDistiller(model_name="models/gemini-2.5-flash", temperature=0.1, proxy=proxy)
 
     # 生成输出文件路径
     now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -294,4 +351,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
