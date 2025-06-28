@@ -30,7 +30,6 @@ class ClusterDataValidator:
         Args:
             logger: 日志记录器，如果为None则使用默认配置
         """
-        self.logger = logger or logging.getLogger(__name__)
     
     def validate_output(self, input_data: Dict[str, Any]):
         """验证输出结果
