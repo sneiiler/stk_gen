@@ -7,7 +7,7 @@
 
 import json
 import logging
-from data_processing.ClusterDataValidator import (
+from data_processing._3_ClusterDataValidator import (
     ClusterDataValidator, 
     validate_satellite_clustering, 
     generate_report

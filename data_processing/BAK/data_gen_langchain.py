@@ -146,15 +146,7 @@ class DataDistiller:
             {"role": "user", "content": user_content.strip()},
         ]
         
-        messages = [
-            {"role": "system", "content": "hello"},
-            {"role": "user", "content": ""},
-        ]
-
-        print(messages)
         
-
-
         response = self.client.chat.completions.create(  # type: ignore
             model=self.model_name,
             reasoning_effort="low",
@@ -166,7 +158,7 @@ class DataDistiller:
         content = ""
 
         for chunk in response:
-            print(chunk.choices[0].delta)
+            print(chunk.choices[0].delta.content, end="", flush=True)
 
         # for chunk in response:
         #     if chunk.choices[0].delta.reasoning_content:
@@ -330,7 +322,7 @@ def main():
     # 初始化蒸馏器
     proxy = "socks5://127.0.0.1:1089"
 
-    distiller = DataDistiller(model_name="models/gemini-2.5-flash", temperature=0.1, proxy=proxy)
+    distiller = DataDistiller(model_name="gemini-2.5-pro", temperature=0.1, proxy=proxy)
 
     # 生成输出文件路径
     now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
