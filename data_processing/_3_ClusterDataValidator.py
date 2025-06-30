@@ -364,7 +364,7 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
 
     # 构建注释文本
     annotation = (
-        f"覆盖率分段统计：\n"
+        f"覆盖率分段统计（样本总数: {total})：\n"
         f"100%: {count_100} ({count_100/total:.1%})    "
         f"90~100%: {count_90_100} ({count_90_100/total:.1%})    "
         f"80~90%: {count_80_90} ({count_80_90/total:.1%})    "
@@ -403,9 +403,9 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
 
     # 添加标签和标题
     ax.set_xlabel("输入目标数量", fontproperties=chinese_font, fontsize=12, labelpad=10)
-    ax.set_ylabel("目标覆盖率", fontproperties=chinese_font, fontsize=12, labelpad=10)
+    ax.set_ylabel("结果目标覆盖率", fontproperties=chinese_font, fontsize=12, labelpad=10)
     ax.set_title(
-        "输入目标数量 vs 目标覆盖率 v1(气泡大小表示数据点数量)", 
+        "Gemini 2.5 Pro-250605 数据推理结果", 
         fontproperties=chinese_font, fontsize=14, pad=20
     )
 
@@ -418,15 +418,15 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     
     # 添加颜色条（使用先前创建的ScalarMappable）
     cbar = fig.colorbar(sm, ax=ax, pad=0.01)
-    cbar.ax.set_ylabel("覆盖率", fontproperties=chinese_font)
+    cbar.ax.set_ylabel("结果目标覆盖率", fontproperties=chinese_font)
 
     # 在图片下方添加注释
     fig = plt.gcf()
     fig.subplots_adjust(bottom=0.15)  # 留出空间放注释
     fig.text(
-        0.5, 0.02, annotation, ha="center", va="bottom", 
+        0.48, 0.02, annotation, ha="center", va="bottom", 
         fontsize=12, fontproperties=chinese_font,
-        bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round,pad=0.5')
+        bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round,pad=0.2')
     )
 
     # 保存或显示
@@ -443,9 +443,9 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    data_path = (
-        get_data_dir() / "distilled_training_data_v20250618_sharegpt_format_v1.json"
-    )
+    # data_path = (
+    #     get_data_dir() / "distilled_training_data_v20250618_sharegpt_format_v1.json"
+    # )
     # data_path = (
     #     get_data_dir() / "distilled_training_data_v20250626_sharegpt_format_v2.jsonl"
     # )
@@ -455,7 +455,7 @@ def main():
     validator = ClusterDataValidator(file_path=data_path)
     data = validator.validate_output()
 
-    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-44:-4]}.png"))
+    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-51:-4]}.png"))
     print(len(data))
 
 

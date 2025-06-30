@@ -54,20 +54,20 @@ def generate_dataset(timestamp):
         "target_edges": target_edges
     }
 
-# 生成200组数据
+# 生成100组数据
 # 每组数据结构为dict，包含时间戳、策略、卫星属性、卫星-卫星边、卫星-目标边
 # 最终输出为JSON格式
 
 datasets = []
 
 now = datetime.now(timezone.utc)
-for i in range(200):
+for i in range(100):
     ts = (now + timedelta(seconds=10*i)).strftime("%Y-%m-%dT%H:%M:%SZ")
     datasets.append(generate_dataset(ts))
 
 # 写入到data目录下的mock_satellite_observation_data_时间戳.json文件
 file_ts = get_current_timestamp()
-output_path = get_data_dir() / f"mock_satellite_observation_data_{file_ts}_v3.json"
+output_path = get_data_dir() / f"mock_satellite_observation_data_{file_ts}_v13.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(datasets, f, ensure_ascii=False, indent=2)
 
