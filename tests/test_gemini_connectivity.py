@@ -20,7 +20,7 @@ from icecream import ic
 # 设置代理配置
 proxy_config = httpx.Proxy("socks5://127.0.0.1:1089")
 
-GEMINI_API_KEY="AIzaSyAc8m9lfsDKgZZofjjIPmdUTusJOqDJRck"
+GEMINI_API_KEY="AIzaSyBLO9aOoRS-16dNOIFjXGrG6SS7LceASlY"
 GEMINI_API_BASE="https://generativelanguage.googleapis.com/v1beta/openai/"
 # 创建 OpenAI 客户端，配置代理
 client = openai.OpenAI(

@@ -47,7 +47,7 @@ load_dotenv(env_path)
 
 # 获取Gemini API配置
 api_base_gemini = os.getenv("GEMINI_API_BASE")
-api_key_gemini = os.getenv("GEMINI_API_KEY_7")
+api_key_gemini = os.getenv("GEMINI_API_KEY")
 
 print(f"Gemini API配置: {'✓' if api_key_gemini and api_base_gemini else '✗'}")
 

@@ -67,7 +67,7 @@ for i in range(100):
 
 # 写入到data目录下的mock_satellite_observation_data_时间戳.json文件
 file_ts = get_current_timestamp()
-output_path = get_data_dir() / f"mock_satellite_observation_data_{file_ts}_v13.json"
+output_path = get_data_dir() / f"mock_satellite_observation_data_{file_ts}_v7.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(datasets, f, ensure_ascii=False, indent=2)
 

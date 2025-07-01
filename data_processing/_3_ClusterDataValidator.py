@@ -196,7 +196,7 @@ class ClusterDataValidator:
                 "input_targets_num": len(input_targets),
                 "output_targets_num": len(output_targets),
                 "coverage_rate": (
-                    round(len(output_targets & input_targets) / len(input_targets), 2)
+                    round(len(output_targets) / len(input_targets), 2)
                     if input_targets
                     else 0
                 ),
@@ -327,7 +327,7 @@ class ClusterDataValidator:
                     result[index].details["merge_candidates"] = merge_candidates
 
 
-def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = None):
+def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = None,image_title: str = "数据推理结果"):
     """
     绘制输入目标数量 vs 目标覆盖率的气泡图，气泡大小表示数据点数量，
     并在图片下方添加覆盖率分段统计注释
@@ -357,6 +357,7 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
 
     # 统计覆盖率分段数量
     total = len(coverage_rates)
+    count_gt_100 = sum(1 for r in coverage_rates if r > 1.0)
     count_100 = sum(1 for r in coverage_rates if r == 1.0)
     count_90_100 = sum(1 for r in coverage_rates if 0.9 <= r < 1.0)
     count_80_90 = sum(1 for r in coverage_rates if 0.8 <= r < 0.9)
@@ -365,6 +366,7 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     # 构建注释文本
     annotation = (
         f"覆盖率分段统计（样本总数: {total})：\n"
+        f">100%: {count_gt_100} ({count_gt_100/total:.1%})    "
         f"100%: {count_100} ({count_100/total:.1%})    "
         f"90~100%: {count_90_100} ({count_90_100/total:.1%})    "
         f"80~90%: {count_80_90} ({count_80_90/total:.1%})    "
@@ -384,7 +386,7 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     norm = Normalize(vmin=min(coverage_rates), vmax=max(coverage_rates))
     
     # 创建一个ScalarMappable用于颜色映射
-    cmap = plt.colormaps['viridis']  # 使用推荐的新方法
+    cmap = plt.colormaps['viridis']
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])  # 必须设置一个空数组
     
@@ -405,13 +407,13 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     ax.set_xlabel("输入目标数量", fontproperties=chinese_font, fontsize=12, labelpad=10)
     ax.set_ylabel("结果目标覆盖率", fontproperties=chinese_font, fontsize=12, labelpad=10)
     ax.set_title(
-        "Gemini 2.5 Pro-250605 数据推理结果", 
+        image_title,
         fontproperties=chinese_font, fontsize=14, pad=20
     )
 
     # 设置坐标轴范围
     ax.set_xlim(min(input_nums) - 1, max(input_nums) + 1)
-    ax.set_ylim(min(coverage_rates) - 0.05, 1.05)
+    ax.set_ylim(min(coverage_rates) - 0.05, max(coverage_rates)+ 0.02)
 
     # 添加网格和样式优化
     ax.grid(True, linestyle="--", alpha=0.6)
@@ -443,19 +445,26 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    data_path = (
+        get_data_dir() / "training_data_sharegpt_gpt-o4mini-o3_20250618_v1.jsonl"
+    )
     # data_path = (
-    #     get_data_dir() / "distilled_training_data_v20250618_sharegpt_format_v1.json"
+    #     get_data_dir() / "training_data_sharegpt_qwen3_235B_A22B_20250626_113625_30_v2.jsonl"
     # )
     # data_path = (
-    #     get_data_dir() / "distilled_training_data_v20250626_sharegpt_format_v2.jsonl"
+    #     get_data_dir() / "training_data_sharegpt_gemini-2.5-pro_20250629_103625_30_v3.jsonl"
     # )
     data_path = (
-        get_data_dir() / "training_data_sharegpt_gemini-2.5-pro_20250629_103625_30_v3.jsonl"
+        get_data_dir() / "training_data_sharegpt_qwen3-14b_20250701_155324_24_v5.jsonl"
     )
+    # image_title = "Qwen3 235B-A22B 数据推理结果"
+    # image_title = "Google Gemini-2.5-pro-250605 数据推理结果"
+    # image_title = "OpenAI GPT-o3/o4mini 数据推理结果"
+    image_title = "Qwen3 14B 数据推理结果"
     validator = ClusterDataValidator(file_path=data_path)
     data = validator.validate_output()
 
-    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-51:-4]}.png"))
+    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-51:-4]}.png"), image_title=image_title)
     print(len(data))
 
 
