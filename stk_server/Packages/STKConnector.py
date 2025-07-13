@@ -184,7 +184,8 @@ class STKConnector:
         # 获取场景中的所有卫星对象
         paths = self.get_objects("Satellite")
         resp = {}
-        for path in tqdm(paths, desc="Calculating satellite ECEF"):
+        # for path in tqdm(paths, desc="Calculating satellite ECEF"):
+        for path in paths:
             satellite = self.root.GetObjectFromPath(path)
             satellite_name = satellite.InstanceName
             
@@ -192,7 +193,7 @@ class STKConnector:
             if instance_names is not None and satellite_name not in instance_names:
                 continue
                 
-            print(f"处理satellite: {satellite_name}")
+            # print(f"处理satellite: {satellite_name}")
             orbit_begin_time = Tools.get_date_string_by_timestamp(
                 Tools.get_ms_timestamp_by_date_string(self.scenario_begin_time) + start_time_shift
             )
@@ -1330,14 +1331,14 @@ class STKConnector:
                 # print(f"跳过missile: {missile_name}")
                 continue
                 
-            print(f"处理missile: {missile_name}")
+            # print(f"处理missile: {missile_name}")
             orbit_begin_time = Tools.get_date_string_by_timestamp(
                 Tools.get_ms_timestamp_by_date_string(self.scenario_begin_time) + start_time_shift
             )
             orbit_end_time = Tools.get_date_string_by_timestamp(
                 Tools.get_ms_timestamp_by_date_string(self.scenario_begin_time) + start_time_shift + period
             )
-            ic(orbit_begin_time, orbit_end_time)
+            # ic(orbit_begin_time, orbit_end_time)
             missileDP = missile.DataProviders.Item("Cartesian Position").Group.Item("Fixed")
             result = missileDP.Exec(orbit_begin_time, orbit_end_time, step)
             times = result.DataSets.GetDataSetByName("Time").GetValues()
@@ -1345,7 +1346,7 @@ class STKConnector:
             y_pos = result.DataSets.GetDataSetByName("y").GetValues()
             z_pos = result.DataSets.GetDataSetByName("z").GetValues()
             _temp = []
-            ic(_temp)
+            # ic(_temp)
             for t, x, y, z in zip(times, x_pos, y_pos, z_pos):
                 _temp.append(
                     (
@@ -1358,5 +1359,5 @@ class STKConnector:
                 if ret_single_point:
                     break
             resp.update({missile_name: _temp})
-            ic(resp)
+            # ic(resp)
         return resp

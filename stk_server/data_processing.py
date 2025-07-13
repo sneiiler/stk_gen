@@ -1,12 +1,18 @@
 import csv
 import json
 import os
+from pathlib import Path
 from typing import List, Dict, Any
+
+from tqdm import tqdm
 from stk_server.Packages import STKConnector, Tools
 
 
 def generate_satellite_target_visibility_data(
-    csv_path: str, scenario_begin_time: str, step: int = 10, output_file: str | None = None
+    csv_path: str | Path,
+    scenario_begin_time: str,
+    step: int = 10,
+    output_file: str | Path | None = None,
 ) -> List[Dict[str, Any]]:
     """
     解析卫星-目标可见性CSV，按可见时段每隔step秒采样卫星和目标的ECEF坐标，生成结构化数据。
@@ -17,7 +23,7 @@ def generate_satellite_target_visibility_data(
         csv_path (str): CSV文件路径
         scenario_begin_time (str): 场景开始时间（如 '6 Jun 2025 04:00:00.000'）
         step (int): 采样步长（秒）
-        output_file (str | None): 输出JSON文件路径，如果指定则实时保存结果
+        output_file (str | Path): 输出JSON文件路径，如果指定则实时保存结果
 
     Returns:
         List[dict]: 结构化数据列表
@@ -63,7 +69,9 @@ def generate_satellite_target_visibility_data(
 
     # 2. 读取卫星间可见性数据
     sat_sat_visibility_dict = {}
-    sat_sat_csv_path = csv_path.replace("satellites_to_targets_access", "satellites_mutual_access")
+    sat_sat_csv_path = str(csv_path).replace(
+        "satellites_to_targets_access", "satellites_mutual_access"
+    )
     if os.path.exists(sat_sat_csv_path):
         with open(sat_sat_csv_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -75,7 +83,10 @@ def generate_satellite_target_visibility_data(
                 start_time = row["开始时间"]
                 end_time = row["结束时间"]
                 duration = float(row["持续时长(秒)"])
-                t0 = Tools.get_ms_timestamp_by_date_string(start_time) - scenario_begin_ts
+                t0 = (
+                    Tools.get_ms_timestamp_by_date_string(start_time)
+                    - scenario_begin_ts
+                )
                 t1 = Tools.get_ms_timestamp_by_date_string(end_time) - scenario_begin_ts
                 if t0 < 0 or t1 < 0:
                     continue
@@ -111,7 +122,7 @@ def generate_satellite_target_visibility_data(
 
     # 4. 对每个卫星在每个采样时间点，统计可见目标和可见卫星
     result = []
-    
+
     # 如果指定了输出文件，初始化文件
     if output_file:
         # 如果文件已存在，先读取已有数据
@@ -122,17 +133,16 @@ def generate_satellite_target_visibility_data(
                 print(f"从现有文件加载了 {len(result)} 条记录")
             except:
                 result = []
-        
+
         # 创建备份文件名
-        backup_file = output_file.replace('.json', '_backup.json')
-        
-    total_combinations = len(all_sats) * len(sample_time_points)
+        backup_file = str(output_file).replace(".json", "_backup.json")
+
     processed_count = 0
-    for sat_id in sorted(all_sats):
+    for sat_id in tqdm(sorted(all_sats),desc="Processing satellites"):
         if sat_id not in visibility_dict:
             continue
 
-        for t_offset in sample_time_points:
+        for t_offset in tqdm(sample_time_points,desc="Processing time offsets"):
             # 统计此刻可见的所有目标
             target_visibility = []
             for tgt_id, intervals in visibility_dict[sat_id].items():
@@ -146,7 +156,9 @@ def generate_satellite_target_visibility_data(
                             ret_single_point=True,
                             instance_names=[tgt_id],  # 只获取当前目标的坐标
                         )
-                        tgt_ecef = missile_ecef_data.get(tgt_id, [[None, None, None, None]])[0][1:]
+                        tgt_ecef = missile_ecef_data.get(
+                            tgt_id, [[None, None, None, None]]
+                        )[0][1:]
 
                         # 计算剩余可见时间
                         remaining_visibility = t1 - t_offset
@@ -157,7 +169,10 @@ def generate_satellite_target_visibility_data(
                                 "target_value": 3,
                                 "observation_priority": 8,
                                 "position": tgt_ecef,
-                                "visibility_time_window": [t_offset, t_offset + min(t1, step)],
+                                "visibility_time_window": [
+                                    t_offset,
+                                    t_offset + min(t1, step),
+                                ],
                             }
                         )
                         break  # 一个目标只加一次
@@ -174,7 +189,9 @@ def generate_satellite_target_visibility_data(
                 ret_single_point=True,
                 instance_names=[sat_id],  # 只获取当前卫星的坐标
             )
-            sat_ecef = satellite_ecef_data.get(sat_id, [[None, None, None, None]])[0][1:]
+            sat_ecef = satellite_ecef_data.get(sat_id, [[None, None, None, None]])[0][
+                1:
+            ]
 
             # 统计此刻可见的所有卫星
             inter_satellite_connectivity = []
@@ -183,30 +200,55 @@ def generate_satellite_target_visibility_data(
                     for t0, t1, duration in intervals:
                         if t0 <= t_offset <= t1:
                             # 获取其他卫星的坐标
-                            other_sat_ecef_data = stk_conn.get_satellite_ecef_by_time_shift(
-                                start_time_shift=t_offset,
-                                period=10,
-                                step=1,
-                                ret_single_point=True,
-                                instance_names=[other_sat_id],
+                            other_sat_ecef_data = (
+                                stk_conn.get_satellite_ecef_by_time_shift(
+                                    start_time_shift=t_offset,
+                                    period=10,
+                                    step=1,
+                                    ret_single_point=True,
+                                    instance_names=[other_sat_id],
+                                )
                             )
-                            other_sat_ecef = other_sat_ecef_data.get(other_sat_id, [[None, None, None, None]])[0][1:]
+                            other_sat_ecef = other_sat_ecef_data.get(
+                                other_sat_id, [[None, None, None, None]]
+                            )[0][1:]
 
                             # 计算连接质量（基于距离的归一化值）
                             # 这里使用一个简单的示例：假设最大距离为10000km，最小距离为100km
                             # 实际应用中应该根据具体场景调整这些参数
                             distance = Tools.ecef_distance(
-                                {'x': sat_ecef[0], 'y': sat_ecef[1], 'z': sat_ecef[2]},
-                                {'x': other_sat_ecef[0], 'y': other_sat_ecef[1], 'z': other_sat_ecef[2]}
+                                {"x": sat_ecef[0], "y": sat_ecef[1], "z": sat_ecef[2]},
+                                {
+                                    "x": other_sat_ecef[0],
+                                    "y": other_sat_ecef[1],
+                                    "z": other_sat_ecef[2],
+                                },
                             )
-                            connection_quality = max(0, min(100, int(100 * (1 - (distance - 100000) / (10000000 - 100000)))))
+                            connection_quality = max(
+                                0,
+                                min(
+                                    100,
+                                    int(
+                                        100
+                                        * (
+                                            1
+                                            - (distance - 100000) / (10000000 - 100000)
+                                        )
+                                    ),
+                                ),
+                            )
 
-                            inter_satellite_connectivity.append({
-                                "to_satellite_id": other_sat_id,
-                                "position": other_sat_ecef,
-                                "connection_quality": connection_quality,
-                                "visibility_time_window": [t_offset, t_offset + min(t1, step)]
-                            })
+                            inter_satellite_connectivity.append(
+                                {
+                                    "to_satellite_id": other_sat_id,
+                                    "position": other_sat_ecef,
+                                    "connection_quality": connection_quality,
+                                    "visibility_time_window": [
+                                        t_offset,
+                                        t_offset + min(t1, step),
+                                    ],
+                                }
+                            )
                             break  # 一个卫星只加一次
 
             data = {
@@ -218,30 +260,27 @@ def generate_satellite_target_visibility_data(
                 },
                 "inter_satellite_connectivity": inter_satellite_connectivity,
                 "target_visibility": target_visibility,
-                "timestamp":Tools.get_date_string_by_timestamp(t_offset + scenario_begin_ts),
+                "timestamp": Tools.get_date_string_by_timestamp(
+                    t_offset + scenario_begin_ts
+                ),
                 "time_offset_from_scenario_start": t_offset,
             }
             result.append(data)
             processed_count += 1
-            
+
             # 实时保存到文件
             if output_file:
                 try:
                     # 先保存到备份文件
                     with open(backup_file, "w", encoding="utf-8") as f:
                         json.dump(result, f, ensure_ascii=False, indent=2)
-                    
+
                     # 备份成功后，重命名为正式文件
                     if os.path.exists(backup_file):
                         if os.path.exists(output_file):
                             os.remove(output_file)
                         os.rename(backup_file, output_file)
-                    
-                    # 每10条记录打印一次进度
-                    if processed_count % 10 == 0:
-                        progress = (processed_count / total_combinations) * 100
-                        print(f"进度: {processed_count}/{total_combinations} ({progress:.1f}%) - 已保存到 {output_file}")
-                        
+
                 except Exception as e:
                     print(f"保存文件时出错: {e}")
 
