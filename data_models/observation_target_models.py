@@ -208,7 +208,7 @@ class MissileInfo(BaseModel):
     trajectory_epoch_second: int = Field(
         description="导弹轨迹时间(相对当前场景开始时间的偏移秒数)",
         ge=0,
-        le=300
+        le=350
     )  # 导弹轨迹时间
     speed: float = Field(
         description="导弹速度(km/s)",
@@ -218,7 +218,7 @@ class MissileInfo(BaseModel):
     altitude: float = Field(
         description="导弹高度(km)",
         ge=100,
-        le=1500.0
+        le=2500.0
     )  # 导弹高度（单位：km）
     latitude: float = Field(description="导弹纬度(deg)")  # 导弹发射纬度（单位：度）
     longitude: float = Field(description="导弹经度(deg)")  # 导弹发射经度（单位：度）
