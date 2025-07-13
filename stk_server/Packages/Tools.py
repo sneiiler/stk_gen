@@ -46,8 +46,8 @@ def haversine_distance(p1, p2):
     dlon = lon2 - lon1
 
     a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
@@ -70,27 +70,51 @@ def ecef_distance(p1, p2):
     dy = p1["y"] - p2["y"]
     dz = p1["z"] - p2["z"]
 
-    distance = math.sqrt(dx**2 + dy**2 + dz**2)
+    distance = math.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
     return distance
 
 
-# def ecef2lla(x, y, z):
-#     """
-#     根据地心地固系xyz坐标，转为经纬高
-#     Args:
-#         x: 心地固系xyz坐标
-#         y: 心地固系xyz坐标
-#         z: 心地固系xyz坐标
+def ecef2lla(x, y, z):
+    """
+    将ECEF坐标转换为LLA坐标（纬度、经度、高度）。仅支持单个点转换。
 
-#     Returns:
-#         经纬高
-#     """
-#     transformer = pyproj.Transformer.from_crs(
-#         {"proj": "geocent", "ellps": "WGS84", "dataum": "WGS84"},
-#         {"proj": "latlon", "ellps": "WGS84", "dataum": "WGS84"},
-#     )
-#     lon, lat, alt = transformer.transform(x, y, z, radians=False)
-#     return lat, lon, alt
+    参数:
+    x, y, z: ECEF坐标（米），浮点数。
+
+    返回:
+    lat, lon, alt: 纬度（度）、经度（度）、高度（米）。
+    """
+    # WGS84椭球参数
+    a = 6378137.0  # 赤道半径 (m)
+    b = 6356752.3142  # 极半径 (m)
+    e2 = 6.69437999014e-3  # 第一偏心率平方
+    e_prime2 = e2 / (1 - e2)  # 第二偏心率平方
+
+    # 计算经度
+    lon = math.atan2(y, x)
+
+    # 计算p和theta
+    p = math.sqrt(x ** 2 + y ** 2)
+    theta = math.atan2(z * a, p * b)
+
+    # 计算纬度（使用Bowring迭代方法）
+    sin_theta = math.sin(theta)
+    cos_theta = math.cos(theta)
+    lat = math.atan2(z + e_prime2 * b * sin_theta ** 3,
+                     p - e2 * a * cos_theta ** 3)
+
+    # 计算主曲率半径N
+    sin_lat = math.sin(lat)
+    N = a / math.sqrt(1 - e2 * sin_lat ** 2)
+
+    # 计算高度
+    alt = p / math.cos(lat) - N
+
+    # 转换为度
+    lat_deg = math.degrees(lat)
+    lon_deg = math.degrees(lon)
+
+    return lat_deg, lon_deg, alt
 
 
 def lla2ecef(lat, lon, h):
@@ -115,7 +139,7 @@ def lla2ecef(lat, lon, h):
     x = round(x, 5)
     y = (N + h) * math.cos(deg2rad(lat)) * math.sin(deg2rad(lon))
     y = round(y, 5)
-    z = (N * (1 - e**2) + h) * math.sin(deg2rad(lat))
+    z = (N * (1 - e ** 2) + h) * math.sin(deg2rad(lat))
     z = round(z, 5)
 
     return x, y, z
@@ -164,13 +188,13 @@ def get_ms_timestamp_by_date_string(date_string: str):
     """
     dt_part = date_string.split(".")
     dt_obj = datetime.strptime(dt_part[0], "%d %b %Y %H:%M:%S")
-    
+
     # 将小数部分作为浮点数处理，确保正确转换各种长度的毫秒值
     ms_part = 0
     if len(dt_part) > 1 and dt_part[1]:
         ms_part = float("0." + dt_part[1])
         ms_part = int(ms_part * 1000)  # 转换为毫秒
-        
+
     return int(time.mktime(dt_obj.timetuple())) + ms_part / 1000
 
 

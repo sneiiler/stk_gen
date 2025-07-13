@@ -455,12 +455,12 @@ def main():
     #     get_data_dir() / "training_data_sharegpt_gemini-2.5-pro_20250629_103625_30_v3.jsonl"
     # )
     data_path = (
-        get_data_dir() / "training_data_sharegpt_qwen3-14b_20250701_155324_24_v5.jsonl"
+        get_data_dir() / "training_data_sharegpt_qwen3-4b_20250701_191138_24_v5.jsonl"
     )
     # image_title = "Qwen3 235B-A22B 数据推理结果"
     # image_title = "Google Gemini-2.5-pro-250605 数据推理结果"
     # image_title = "OpenAI GPT-o3/o4mini 数据推理结果"
-    image_title = "Qwen3 14B 数据推理结果"
+    image_title = "Qwen3 4B 数据推理结果"
     validator = ClusterDataValidator(file_path=data_path)
     data = validator.validate_output()
 

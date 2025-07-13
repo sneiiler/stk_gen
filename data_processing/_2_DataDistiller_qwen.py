@@ -474,15 +474,15 @@ def main():
 
     proxy = "socks5://127.0.0.1:1089"
     # model_name = "gemini-2.5-pro"  # 或 "gemini-2.5-pro" 如需更高质量
-    model_name = "qwen3-14b"  # 或 "gemini-2.5-pro" 如需更高质量
+    model_name = "qwen3-4b"  # 或 "gemini-2.5-pro" 如需更高质量
 
     # 初始化Gemini蒸馏器
     distiller = DataDistiller(
         model_name=model_name,  # 或 "gemini-2.5-pro" 如需更高质量
         temperature=0.1,
         proxy=None,  # "socks5://127.0.0.1:1089" 如果需要代理
-        requests_per_minute=200,  # 根据你的API限制调整
-        max_workers=8,  # 建议从4开始，成功后可以增加到6-8
+        requests_per_minute=60,  # 根据你的API限制调整
+        max_workers=5,  # 建议从4开始，成功后可以增加到6-8
         reasoning_effort="high",  # low/medium/high, 控制思考深度
     )
 
