@@ -226,6 +226,13 @@ def get_time_slice_summary(time_slices: List[dict]) -> dict:
         observations = slice_data['target_visibility']
         total_observations += len(observations)
         for obs in observations:
+            # 处理新的数据结构
+            if 'to_target' in obs and obs['to_target'].get('id'):
+                summary['unique_targets'].add(obs['to_target']['id'])
+            if 'from_satellite' in obs and obs['from_satellite'].get('id'):
+                summary['unique_satellites'].add(obs['from_satellite']['id'])
+
+            # 兼容旧的数据结构
             if 'target_id' in obs:
                 summary['unique_targets'].add(obs['target_id'])
             if 'satellite_id' in obs:
@@ -500,8 +507,9 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
 
     # 绘制目标（五角星）- 使用现代红色
     if target_lats:
+        unique_targets = len(set(zip(target_lons, target_lats)))
         plt.scatter(target_lons, target_lats, c='#F72585', s=120, marker='*',
-                    label=f'目标 ({len(target_lats)}个)', alpha=0.9, edgecolors='#C73E1D', linewidth=1.5)
+                    label=f'目标 ({unique_targets}个)', alpha=0.9, edgecolors='#C73E1D', linewidth=1.5)
 
         # 添加目标ID标签（保持标签完整性，不影响绘图区域布局）
         for lon, lat, target_id in zip(target_lons, target_lats, target_ids):
@@ -659,12 +667,12 @@ if __name__ == "__main__":
         if slice_data['inter_satellite_connectivity']:
             connections = slice_data['inter_satellite_connectivity']
             print(f"  连接关系示例: {connections[0] if connections else 'None'}")
-
+    exit()
     # 可视化第一个时间切片的卫星和目标分布
     print("\n生成卫星和目标位置分布图...")
     try:
         # 创建可视化图片保存目录
-        visualize_dir = get_documents_dir() / "visualize_figs"
+        visualize_dir = get_documents_dir() / "visualize_figs_scenario_1"
         visualize_dir.mkdir(exist_ok=True)
 
         # 创建全局目标颜色映射，确保所有时间切片中同一目标使用相同颜色
