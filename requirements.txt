@@ -1,4 +1,4 @@
-# pypiwin32==223
+pypiwin32==223; sys_platform == "win32"
 # pyproj>=3.6.0
 matplotlib>=3.7.0
 numpy>=1.24.0

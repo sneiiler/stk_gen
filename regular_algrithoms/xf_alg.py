@@ -3,19 +3,11 @@ from pathlib import Path
 import json
 from collections import defaultdict
 import numpy as np
-from pulp import *
-from pydantic import BaseModel, Field
+from pulp import LpProblem, LpMaximize, LpVariable, PULP_CBC_CMD, value
 import math
 
 from utils.misc_utils import get_data_dir
-
-
-class ClusterInfo(BaseModel):
-    """分簇信息模型"""
-    cluster_id: int = Field(description="分簇ID")
-    master: int = Field(description="主节点卫星ID")
-    sats: List[int] = Field(description="分簇中的卫星ID列表")
-    targets: List[int] = Field(description="分簇观测的目标ID列表")
+from data_classes.clustering_models import ClusterInfo
 
 
 class SatelliteClusteringAlgorithm:
@@ -61,12 +53,17 @@ class SatelliteClusteringAlgorithm:
             overlap_dict: 卫星对目标的重叠度字典 {(sat_i, sat_j, target_k): overlap}
             satellite_target_visibility: 卫星对目标的可见性字典 {(sat_id, target_id): window}
         """
-        satellites = time_slice.get("satellites", [])
         connectivity = time_slice.get("inter_satellite_connectivity", [])
         target_visibility = time_slice.get("target_visibility", [])
 
+        # 从inter_satellite_connectivity中获取所有卫星ID
+        all_sat_ids = set()
+        for conn in connectivity:
+            all_sat_ids.add(conn["from_satellite"]["id"])
+            all_sat_ids.add(conn["to_satellite"]["id"])
+
         # 创建卫星ID到索引的映射
-        sat_ids = [sat["id"] for sat in satellites]
+        sat_ids = sorted(list(all_sat_ids))  # 排序保证一致性
         sat_id_to_idx = {sat_id: idx for idx, sat_id in enumerate(sat_ids)}
         n_sats = len(sat_ids)
 
@@ -136,15 +133,22 @@ class SatelliteClusteringAlgorithm:
         Returns:
             分簇结果列表
         """
-        satellites = time_slice.get("satellites", [])
-        if not satellites:
+        connectivity = time_slice.get("inter_satellite_connectivity", [])
+        if not connectivity:
             return []
-
-        sat_ids = [sat["id"] for sat in satellites]
-        n_sats = len(sat_ids)
 
         # 构建矩阵
         insight_matrix, cost_matrix, overlap_dict, sat_target_vis = self.build_matrices(time_slice)
+
+        # 从构建的矩阵中获取卫星信息
+        n_sats = insight_matrix.shape[0]
+
+        # 从inter_satellite_connectivity中获取所有卫星ID
+        all_sat_ids = set()
+        for conn in connectivity:
+            all_sat_ids.add(conn["from_satellite"]["id"])
+            all_sat_ids.add(conn["to_satellite"]["id"])
+        sat_ids = sorted(list(all_sat_ids))
 
         # 创建优化问题
         prob = LpProblem("Satellite_Clustering", LpMaximize)
@@ -158,7 +162,7 @@ class SatelliteClusteringAlgorithm:
 
         # 目标函数：最大化观测重叠度
         objective = 0
-        for (i, j, target_id), overlap in overlap_dict.items():
+        for (i, j, _), overlap in overlap_dict.items():
             objective += overlap * a_vars[(i, j)]
         prob += objective
 
@@ -191,7 +195,7 @@ class SatelliteClusteringAlgorithm:
                             prob += a_vars[(i, k)] >= a_vars[(i, j)] + a_vars[(j, k)] - 1
 
         # 求解
-        prob.solve(PULP_CBC_CMD(msg=0))
+        prob.solve(PULP_CBC_CMD(msg=False))
 
         # 提取分簇结果
         clusters = self.extract_clusters(a_vars, sat_ids, sat_target_vis, n_sats)
@@ -386,6 +390,7 @@ if __name__ == "__main__":
         exit()
 
     time_slices = load_data(data_file)
+    time_slices = time_slices[:1]
     print(f"成功加载 {len(time_slices)} 个时间切片")
 
     # 执行分簇

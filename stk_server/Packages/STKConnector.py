@@ -20,27 +20,21 @@ import win32com.client
 from typing import List, Dict, Tuple
 from icecream import ic
 
-from data_models.observation_target_models import (
+from data_classes.observation_target_models import (
     ObservationTargetInfo,
     RevisitAnalysisConstraints,
     RevisitAnalysisInfo,
     STKAccessEvent,
     MissileInfo,
 )
-from data_models.payload_models import PayloadInfo
+from data_classes.payload_models import PayloadInfo
 
-from data_models.satellite_models import (
-    SatelliteInfo,
-    LifetimeEstimationInfo,
-    LightingDuration,
-    LightingTimeData,
-    RegressionAnalysisInfo,
-    SunBetaAngleInfo,
+from data_classes.satellite_models import (
+    SatelliteInfo
 )
 
 from stk_server.Packages.stkutil import (
     AgEOrbitStateType,
-    AgECoordinateSystem,
 )
 from stk_server.Packages.stkobjects import (
     AgESTKObjectType,
