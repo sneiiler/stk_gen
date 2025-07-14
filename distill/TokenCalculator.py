@@ -77,10 +77,10 @@ class TokenCalculator:
 
     def calculate_tokens(self, data: List[Dict]) -> Tuple[List[int], int]:
         """计算每条数据的token数量
-        
+
         Args:
             data: 数据列表
-            
+
         Returns:
             每条数据的token数量列表和总token数
         """
@@ -94,8 +94,68 @@ class TokenCalculator:
             token_count = len(tokens)
             token_counts.append(token_count)
             total_tokens += token_count
-            
+
         return token_counts, total_tokens
+
+    def calculate_input_output_tokens(self, data: List[Dict]) -> Tuple[List[int], List[int], int, int]:
+        """分别计算输入和输出的token数量
+
+        Args:
+            data: 数据列表，期望包含messages字段的ShareGPT格式
+
+        Returns:
+            输入token数量列表、输出token数量列表、总输入token数、总输出token数
+        """
+        input_token_counts = []
+        output_token_counts = []
+        total_input_tokens = 0
+        total_output_tokens = 0
+
+        for item in tqdm(data, desc="计算输入输出token"):
+            # 检查是否为ShareGPT格式
+            if 'messages' not in item:
+                # 如果不是ShareGPT格式，跳过或使用原有逻辑
+                print(f"警告: 数据项缺少messages字段，跳过")
+                input_token_counts.append(0)
+                output_token_counts.append(0)
+                continue
+
+            messages = item['messages']
+            input_text = ""
+            output_text = ""
+
+            # 分离输入和输出
+            for message in messages:
+                role = message.get('role', '')
+                content = message.get('content', '')
+
+                if role in ['system', 'user']:
+                    # system和user消息作为输入
+                    input_text += content + " "
+                elif role == 'assistant':
+                    # assistant消息作为输出
+                    output_text += content + " "
+
+            # 计算输入token数量
+            if input_text.strip():
+                input_tokens = self.tokenizer.encode(input_text.strip())
+                input_token_count = len(input_tokens)
+            else:
+                input_token_count = 0
+
+            # 计算输出token数量
+            if output_text.strip():
+                output_tokens = self.tokenizer.encode(output_text.strip())
+                output_token_count = len(output_tokens)
+            else:
+                output_token_count = 0
+
+            input_token_counts.append(input_token_count)
+            output_token_counts.append(output_token_count)
+            total_input_tokens += input_token_count
+            total_output_tokens += output_token_count
+
+        return input_token_counts, output_token_counts, total_input_tokens, total_output_tokens
     
     def calculate_statistics(self, token_counts: List[int]) -> Dict[str, Union[float, int]]:
         """计算统计信息
@@ -201,16 +261,18 @@ class TokenCalculator:
         except Exception as e:
             print(f"保存统计结果时出错: {e}")
     
-    def analyze_file(self, file_path: Union[str, Path], save_dir: Union[str, Path, None] = None, 
-                   save_prefix: Optional[str] = None, show_plot: bool = True) -> Dict:
+    def analyze_file(self, file_path: Union[str, Path], save_dir: Union[str, Path, None] = None,
+                   save_prefix: Optional[str] = None, show_plot: bool = True,
+                   separate_input_output: bool = False) -> Dict:
         """分析文件的token分布情况
-        
+
         Args:
             file_path: 数据文件路径
             save_dir: 结果保存目录，默认为数据文件所在目录
             save_prefix: 保存文件前缀，默认为数据文件名
             show_plot: 是否显示图表
-            
+            separate_input_output: 是否分别计算输入和输出token
+
         Returns:
             分析结果字典
         """
@@ -220,66 +282,151 @@ class TokenCalculator:
             save_dir = file_path.parent
         else:
             save_dir = Path(save_dir)
-            
+
         if save_prefix is None:
             save_prefix = file_path.stem
-            
+
         # 创建保存目录
         os.makedirs(save_dir, exist_ok=True)
-        
+
         # 加载数据
         data = self.load_data(file_path)
         if not data:
             print(f"无法加载数据或数据为空: {file_path}")
             return {}
-            
-        # 计算token
-        token_counts, total_tokens = self.calculate_tokens(data)
-        
-        # 计算统计信息
-        statistics = self.calculate_statistics(token_counts)
-        
-        # 打印统计信息
-        print(f"\n{'='*50}")
-        print(f"文件: {file_path}")
-        print(f"总数据条数: {statistics['count']}")
-        print(f"总Token数: {total_tokens}")
-        print(f"每条数据平均Token数: {statistics['mean']:.2f}")
-        print(f"Token数中位数: {statistics['median']:.2f}")
-        print(f"Token数标准差: {statistics['std']:.2f}")
-        print(f"最小Token数: {statistics['min']}")
-        print(f"最大Token数: {statistics['max']}")
-        print(f"25%分位数: {statistics['quartile_25']:.2f}")
-        print(f"75%分位数: {statistics['quartile_75']:.2f}")
-        print(f"{'='*50}\n")
-        
-        # 保存统计结果
-        stats_file = save_dir / f"{save_prefix}_token_stats.json"
-        self.save_statistics_to_file(token_counts, statistics, stats_file)
-        
-        # 绘制直方图
-        plot_file = save_dir / f"{save_prefix}_token_histogram.png"
-        self.plot_histogram(
-            token_counts, 
-            title=f"Token分布直方图 - {file_path.name}",
-            save_path=plot_file,
-            show=show_plot
-        )
-        
-        return {
+
+        result = {
             "file_path": str(file_path),
-            "total_tokens": total_tokens,
-            "statistics": statistics,
-            "stats_file": str(stats_file),
-            "plot_file": str(plot_file)
         }
+
+        if separate_input_output:
+            # 分别计算输入和输出token
+            input_token_counts, output_token_counts, total_input_tokens, total_output_tokens = self.calculate_input_output_tokens(data)
+
+            # 计算输入统计信息
+            input_statistics = self.calculate_statistics(input_token_counts)
+            output_statistics = self.calculate_statistics(output_token_counts)
+
+            # 打印统计信息
+            print(f"\n{'='*60}")
+            print(f"文件: {file_path}")
+            print(f"总数据条数: {len(data)}")
+            print(f"\n【输入Token统计】")
+            print(f"总输入Token数: {total_input_tokens}")
+            print(f"每条数据平均输入Token数: {input_statistics['mean']:.2f}")
+            print(f"输入Token数中位数: {input_statistics['median']:.2f}")
+            print(f"输入Token数标准差: {input_statistics['std']:.2f}")
+            print(f"最小输入Token数: {input_statistics['min']}")
+            print(f"最大输入Token数: {input_statistics['max']}")
+            print(f"输入Token数25%分位数: {input_statistics['quartile_25']:.2f}")
+            print(f"输入Token数75%分位数: {input_statistics['quartile_75']:.2f}")
+
+            print(f"\n【输出Token统计】")
+            print(f"总输出Token数: {total_output_tokens}")
+            print(f"每条数据平均输出Token数: {output_statistics['mean']:.2f}")
+            print(f"输出Token数中位数: {output_statistics['median']:.2f}")
+            print(f"输出Token数标准差: {output_statistics['std']:.2f}")
+            print(f"最小输出Token数: {output_statistics['min']}")
+            print(f"最大输出Token数: {output_statistics['max']}")
+            print(f"输出Token数25%分位数: {output_statistics['quartile_25']:.2f}")
+            print(f"输出Token数75%分位数: {output_statistics['quartile_75']:.2f}")
+
+            print(f"\n【总计】")
+            print(f"总Token数: {total_input_tokens + total_output_tokens}")
+            print(f"输入输出比例: {total_input_tokens/(total_input_tokens + total_output_tokens)*100:.1f}% : {total_output_tokens/(total_input_tokens + total_output_tokens)*100:.1f}%")
+            print(f"{'='*60}\n")
+
+            # 保存统计结果
+            input_stats_file = save_dir / f"{save_prefix}_input_token_stats.json"
+            output_stats_file = save_dir / f"{save_prefix}_output_token_stats.json"
+
+            self.save_statistics_to_file(input_token_counts, input_statistics, input_stats_file)
+            self.save_statistics_to_file(output_token_counts, output_statistics, output_stats_file)
+
+            # 绘制直方图
+            input_plot_file = save_dir / f"{save_prefix}_input_token_histogram.png"
+            output_plot_file = save_dir / f"{save_prefix}_output_token_histogram.png"
+
+            self.plot_histogram(
+                input_token_counts,
+                title=f"输入Token分布直方图 - {file_path.name}",
+                save_path=input_plot_file,
+                show=show_plot
+            )
+
+            self.plot_histogram(
+                output_token_counts,
+                title=f"输出Token分布直方图 - {file_path.name}",
+                save_path=output_plot_file,
+                show=show_plot
+            )
+
+            result.update({
+                "total_input_tokens": total_input_tokens,
+                "total_output_tokens": total_output_tokens,
+                "total_tokens": total_input_tokens + total_output_tokens,
+                "input_statistics": input_statistics,
+                "output_statistics": output_statistics,
+                "input_stats_file": str(input_stats_file),
+                "output_stats_file": str(output_stats_file),
+                "input_plot_file": str(input_plot_file),
+                "output_plot_file": str(output_plot_file)
+            })
+
+        else:
+            # 原有的整体计算逻辑
+            token_counts, total_tokens = self.calculate_tokens(data)
+
+            # 计算统计信息
+            statistics = self.calculate_statistics(token_counts)
+
+            # 打印统计信息
+            print(f"\n{'='*50}")
+            print(f"文件: {file_path}")
+            print(f"总数据条数: {statistics['count']}")
+            print(f"总Token数: {total_tokens}")
+            print(f"每条数据平均Token数: {statistics['mean']:.2f}")
+            print(f"Token数中位数: {statistics['median']:.2f}")
+            print(f"Token数标准差: {statistics['std']:.2f}")
+            print(f"最小Token数: {statistics['min']}")
+            print(f"最大Token数: {statistics['max']}")
+            print(f"25%分位数: {statistics['quartile_25']:.2f}")
+            print(f"75%分位数: {statistics['quartile_75']:.2f}")
+            print(f"{'='*50}\n")
+
+            # 保存统计结果
+            stats_file = save_dir / f"{save_prefix}_token_stats.json"
+            self.save_statistics_to_file(token_counts, statistics, stats_file)
+
+            # 绘制直方图
+            plot_file = save_dir / f"{save_prefix}_token_histogram.png"
+            self.plot_histogram(
+                token_counts,
+                title=f"Token分布直方图 - {file_path.name}",
+                save_path=plot_file,
+                show=show_plot
+            )
+
+            result.update({
+                "total_tokens": total_tokens,
+                "statistics": statistics,
+                "stats_file": str(stats_file),
+                "plot_file": str(plot_file)
+            })
+
+        return result
 
 
 # 示例用法
 if __name__ == "__main__":
     # 初始化Token计算器
     calculator = TokenCalculator()
-    
+
     # 分析指定数据文件
-    data_path = get_data_dir() / "training_data_sharegpt_gemini-2.5-pro_20250629_103625_30_v3.jsonl"
-    calculator.analyze_file(data_path)
+    data_path = get_data_dir() / "OmniThought-0528-sample_sharegpt.jsonl"
+
+    print("=== 整体Token分析 ===")
+    calculator.analyze_file(data_path, show_plot=False)
+
+    print("\n=== 分别计算输入输出Token ===")
+    calculator.analyze_file(data_path, separate_input_output=True, show_plot=False)

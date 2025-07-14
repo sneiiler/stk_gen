@@ -181,3 +181,4 @@ stk_mcp_server/pyproject.toml
 # 临时文件夹
 documents/temp/*
 !documents/temp/.gitkeep
+.DS_Store
