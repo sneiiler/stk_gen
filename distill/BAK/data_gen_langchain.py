@@ -30,7 +30,7 @@ install()
 
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
-from data_models.sft_data_models import (
+from data_classes.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
     SatelliteClusterOutput,

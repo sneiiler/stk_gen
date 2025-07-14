@@ -33,7 +33,7 @@ install()
 
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
-from data_models.sft_data_models import (
+from data_classes.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
     SatelliteClusterOutput,
@@ -47,7 +47,7 @@ load_dotenv(env_path)
 
 # 获取Gemini API配置
 api_base_gemini = os.getenv("GEMINI_API_BASE")
-api_key_gemini = os.getenv("GEMINI_API_KEY_4")
+api_key_gemini = os.getenv("GEMINI_API_KEY_3")
 
 print(f"Gemini API配置: {'✓' if api_key_gemini and api_base_gemini else '✗'}")
 
@@ -463,7 +463,7 @@ def main():
     """主函数。"""
     # 从JSON文件加载数据
     input_file = (
-        get_data_dir() / "mock_satellite_observation_data_20250630_090749_v7.json"
+        get_data_dir() / "mock_satellite_observation_data_20250630_090745_v6.json"
     )
     batch_data = load_json_data(input_file)
 

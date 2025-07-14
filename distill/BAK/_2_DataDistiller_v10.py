@@ -33,7 +33,7 @@ install()
 
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
-from data_models.sft_data_models import (
+from data_classes.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
     SatelliteClusterOutput,
@@ -463,7 +463,7 @@ def main():
     """主函数。"""
     # 从JSON文件加载数据
     input_file = (
-        get_data_dir() / "mock_satellite_observation_data_20250629_102830_v3.json"
+        get_data_dir() / "mock_satellite_observation_data_20250630_090756_v10.json"
     )
     batch_data = load_json_data(input_file)
 
@@ -478,7 +478,7 @@ def main():
         temperature=0.1,
         proxy=proxy,  # "socks5://127.0.0.1:1089" 如果需要代理
         requests_per_minute=60,  # 根据你的API限制调整
-        max_workers=3,  # 建议从4开始，成功后可以增加到6-8
+        max_workers=6,  # 建议从4开始，成功后可以增加到6-8
         reasoning_effort="high",  # low/medium/high, 控制思考深度
     )
 

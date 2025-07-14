@@ -33,7 +33,7 @@ install()
 
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
-from data_models.sft_data_models import (
+from data_classes.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
     SatelliteClusterOutput,
@@ -46,14 +46,14 @@ env_path = get_project_root() / ".env"
 load_dotenv(env_path)
 
 # 获取Gemini API配置
-api_base_gemini = os.getenv("DASHSCOPE_API_BASE")
-api_key_gemini = os.getenv("DASHSCOPE_API_KEY")
+api_base_gemini = os.getenv("GEMINI_API_BASE")
+api_key_gemini = os.getenv("GEMINI_API_KEY_8")
 
-print(f"API配置: {'✓' if api_key_gemini and api_base_gemini else '✗'}")
+print(f"Gemini API配置: {'✓' if api_key_gemini and api_base_gemini else '✗'}")
 
 if not api_key_gemini or not api_base_gemini:
     raise ValueError(
-        "未找到API配置，请检查环境变量 DASHSCOPE_API_KEY 和 DASHSCOPE_API_BASE"
+        "未找到Gemini API配置，请检查环境变量 GEMINI_API_KEY 和 GEMINI_API_BASE"
     )
 
 
@@ -179,18 +179,15 @@ class DataDistiller:
 
                 delta = chunk.choices[0].delta
 
-                
-
 
                 # 获取思考过程（reasoning）- Gemini 2.5不支持
                 if hasattr(delta, "reasoning_content") and delta.reasoning_content:
                     reasoning_content += delta.reasoning_content
-                    # print(f"获取到新的reasoning，长度: {len(delta.reasoning_content)}")
 
                 # 获取正常内容
                 if hasattr(delta, "content") and delta.content:
                     content += delta.content
-                    # print(f"获取到新的content，长度: {len(delta.content)}")
+                    print(f"获取到新的content，长度: {len(delta.content)}")
 
 
 
@@ -388,7 +385,7 @@ class DataDistiller:
                 "timestamp": datetime.datetime.now().isoformat(),
                 "model": self.model_name,
             }
-            # writer.write_line(f"ERROR: {json.dumps(error_data, ensure_ascii=False)}")
+            writer.write_line(f"ERROR: {json.dumps(error_data, ensure_ascii=False)}")
             stats_queue.put("failed")
 
     def process_batch_multithread(
@@ -466,23 +463,22 @@ def main():
     """主函数。"""
     # 从JSON文件加载数据
     input_file = (
-        get_data_dir() / "mock_satellite_observation_data_20250701_083324_v5.json"
+        get_data_dir() / "mock_satellite_observation_data_20250630_090758_v11.json"
     )
     batch_data = load_json_data(input_file)
 
     print(f"加载了 {len(batch_data)} 个数据样本")
 
     proxy = "socks5://127.0.0.1:1089"
-    # model_name = "gemini-2.5-pro"  # 或 "gemini-2.5-pro" 如需更高质量
-    model_name = "qwen3-4b"  # 或 "gemini-2.5-pro" 如需更高质量
+    model_name = "gemini-2.5-pro"  # 或 "gemini-2.5-pro" 如需更高质量
 
     # 初始化Gemini蒸馏器
     distiller = DataDistiller(
         model_name=model_name,  # 或 "gemini-2.5-pro" 如需更高质量
         temperature=0.1,
-        proxy=None,  # "socks5://127.0.0.1:1089" 如果需要代理
+        proxy=proxy,  # "socks5://127.0.0.1:1089" 如果需要代理
         requests_per_minute=60,  # 根据你的API限制调整
-        max_workers=5,  # 建议从4开始，成功后可以增加到6-8
+        max_workers=6,  # 建议从4开始，成功后可以增加到6-8
         reasoning_effort="high",  # low/medium/high, 控制思考深度
     )
 
