@@ -9,12 +9,6 @@ import math
 import time
 from datetime import datetime
 
-# import pyproj
-import icecream
-import matplotlib.pyplot as plt
-
-icecream.install()
-
 # 地球长半轴半径
 earth_radius = 6378137.0
 # 地球扁率
@@ -143,24 +137,6 @@ def lla2ecef(lat, lon, h):
     z = round(z, 5)
 
     return x, y, z
-
-
-def data_plot(x_data, y_data, title=""):
-    """
-    绘图曲线
-    Args:
-        x_data:
-        y_data:
-        title:
-
-    Returns:
-
-    """
-    plt.plot(x_data[1:], y_data[1:])
-    plt.xlabel("x")
-    plt.ylabel("y")
-    plt.title(title)
-    plt.show()
 
 
 def get_timestamp_by_date_string(date_string: str):

@@ -6,6 +6,12 @@ from typing import List, Dict, Any
 
 from tqdm import tqdm
 from stk_server.Packages import STKConnector, Tools
+from data_classes.visibility_data_models import (
+    SatelliteInfo,
+    TargetVisibility,
+    InterSatelliteConnectivity,
+    SatelliteVisibilityData
+)
 
 
 def generate_satellite_target_visibility_data(
@@ -13,7 +19,7 @@ def generate_satellite_target_visibility_data(
     scenario_begin_time: str,
     step: int = 10,
     output_file: str | Path | None = None,
-) -> List[Dict[str, Any]]:
+) -> List[SatelliteVisibilityData]:
     """
     解析卫星-目标可见性CSV，按可见时段每隔step秒采样卫星和目标的ECEF坐标，生成结构化数据。
     每个采样时刻，target_visibility为该卫星此刻能看到的所有目标。
@@ -26,7 +32,7 @@ def generate_satellite_target_visibility_data(
         output_file (str | Path): 输出JSON文件路径，如果指定则实时保存结果
 
     Returns:
-        List[dict]: 结构化数据列表
+        List[SatelliteVisibilityData]: 结构化数据列表
     """
     # 初始化STK连接器
     stk_conn = STKConnector.STKConnector()
@@ -164,16 +170,16 @@ def generate_satellite_target_visibility_data(
                         remaining_visibility = t1 - t_offset
 
                         target_visibility.append(
-                            {
-                                "target_id": tgt_id,
-                                "target_value": 3,
-                                "observation_priority": 8,
-                                "position": tgt_ecef,
-                                "visibility_time_window": [
+                            TargetVisibility(
+                                target_id=tgt_id,
+                                target_value=3,
+                                observation_priority=8,
+                                position=tgt_ecef,
+                                visibility_time_window=[
                                     t_offset,
                                     t_offset + min(t1, step),
                                 ],
-                            }
+                            )
                         )
                         break  # 一个目标只加一次
 
@@ -239,32 +245,32 @@ def generate_satellite_target_visibility_data(
                             )
 
                             inter_satellite_connectivity.append(
-                                {
-                                    "to_satellite_id": other_sat_id,
-                                    "position": other_sat_ecef,
-                                    "connection_quality": connection_quality,
-                                    "visibility_time_window": [
+                                InterSatelliteConnectivity(
+                                    to_satellite_id=other_sat_id,
+                                    position=other_sat_ecef,
+                                    connection_quality=connection_quality,
+                                    visibility_time_window=[
                                         t_offset,
                                         t_offset + min(t1, step),
                                     ],
-                                }
+                                )
                             )
                             break  # 一个卫星只加一次
 
-            data = {
-                "satellite_info": {
-                    "id": sat_id,
-                    "position": sat_ecef,
-                    "health_status": "good",  # 可根据实际情况调整
-                    "full_visibility_time_window_length": step,
-                },
-                "inter_satellite_connectivity": inter_satellite_connectivity,
-                "target_visibility": target_visibility,
-                "timestamp": Tools.get_date_string_by_timestamp(
+            data = SatelliteVisibilityData(
+                satellite_info=SatelliteInfo(
+                    id=sat_id,
+                    position=sat_ecef,
+                    health_status="good",  # 可根据实际情况调整
+                    full_visibility_time_window_length=step,
+                ),
+                inter_satellite_connectivity=inter_satellite_connectivity,
+                target_visibility=target_visibility,
+                timestamp=Tools.get_date_string_by_timestamp(
                     t_offset + scenario_begin_ts
                 ),
-                "time_offset_from_scenario_start": t_offset,
-            }
+                time_offset_from_scenario_start=t_offset,
+            )
             result.append(data)
             processed_count += 1
 
@@ -273,7 +279,9 @@ def generate_satellite_target_visibility_data(
                 try:
                     # 先保存到备份文件
                     with open(backup_file, "w", encoding="utf-8") as f:
-                        json.dump(result, f, ensure_ascii=False, indent=2)
+                        # 将BaseModel对象转换为字典再序列化
+                        result_dicts = [item.model_dump() for item in result]
+                        json.dump(result_dicts, f, ensure_ascii=False, indent=2)
 
                     # 备份成功后，重命名为正式文件
                     if os.path.exists(backup_file):

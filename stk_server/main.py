@@ -1,19 +1,19 @@
+import csv
+import json
 from pathlib import Path
 from typing import List, Dict, Tuple
-import json
+
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
-import csv
+import seaborn as sns
+from icecream import install
 
-from stk_server.Packages import STKConnector, Tools
-from icecream import ic, install
-from data_models.observation_target_models import (
+from data_classes.observation_target_models import (
     MissileInfo,
 )
-
-from utils.misc_utils import get_current_timestamp, get_data_dir, get_documents_dir
+from stk_server.Packages import STKConnector
+from utils.misc_utils import get_current_timestamp, get_data_dir
 
 install()
 stk_conn = STKConnector.STKConnector()
@@ -95,7 +95,7 @@ def visualize_satellites_mutual_access(access_data, output_file: str | Path):
 
 
 def visualize_satellites_to_targets_access(
-    access_data: Dict[str, List[Tuple[str, str, float]]], output_file: str | Path
+        access_data: Dict[str, List[Tuple[str, str, float]]], output_file: str | Path
 ):
     """
     可视化卫星对目标的可见性持续时间数据
@@ -122,7 +122,7 @@ def visualize_satellites_to_targets_access(
             if key in access_data:
                 # 计算总可见时间（分钟）
                 total_duration = (
-                    sum(duration for _, _, duration in access_data[key]) / 60
+                        sum(duration for _, _, duration in access_data[key]) / 60
                 )
                 row.append(total_duration)
             else:
@@ -181,14 +181,12 @@ if __name__ == "__main__":
 
     # 读取并转为 MissileInfo 对象
     with open(
-        get_data_dir() / "missile_route_info_v20250713_085322.json",
-        "r",
-        encoding="utf-8",
+            get_data_dir() / "missile_route_info_v20250713_085322.json",
+            "r",
+            encoding="utf-8",
     ) as f:
         missile_data_loaded = json.load(f)
     missile_list = [MissileInfo(**item) for item in missile_data_loaded]
-    # ic(missile_list)
-    # exit()
 
     # missile_list=missile_list[:2]
 
@@ -197,19 +195,16 @@ if __name__ == "__main__":
     satellites_mutual_access = stk_conn.get_satellites_mutual_access()
     satellites_to_missiles_access = stk_conn.get_satellites_to_missiles_access()
 
-    # # 生成带时间戳的文件名
+    # 生成带时间戳的文件名
     timestamp = get_current_timestamp()
-    csv_filename = get_data_dir() / f"satellites_mutual_access_{timestamp}.csv"
-    png_filename = get_data_dir() / f"satellites_mutual_access_{timestamp}.png"
-    targets_csv_filename = (
-        get_data_dir() / f"satellites_to_targets_access_{timestamp}.csv"
-    )
-    targets_png_filename = (
-        get_data_dir() / f"satellites_to_targets_access_{timestamp}.png"
-    )
+    sat_mutual_access_csv_filename = get_data_dir() / f"stk_raw_data_satellites_mutual_access_{timestamp}.csv"
+    png_filename = get_data_dir() / f"stk_satellites_mutual_access_{timestamp}.png"
+    sat_tgt_csv_filename = get_data_dir() / f"stk_raw_data_satellites_to_targets_access_{timestamp}.csv"
+    targets_png_filename = get_data_dir() / f"satellites_to_targets_access_{timestamp}.png"
+
 
     # 写入卫星互可见性CSV文件
-    with open(csv_filename, "w", newline="", encoding="utf-8") as f:
+    with open(sat_mutual_access_csv_filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         # 写入表头
         writer.writerow(["卫星对", "开始时间", "结束时间", "持续时长(秒)"])
@@ -219,7 +214,7 @@ if __name__ == "__main__":
             for start_time, end_time, duration in access_times:
                 writer.writerow([sat_pair, start_time, end_time, duration])
 
-    print(f"卫星互可见性数据已保存到CSV文件: {csv_filename}")
+    print(f"卫星互可见性数据已保存到CSV文件: {sat_mutual_access_csv_filename}")
 
     # 生成并保存卫星互可见性热力图
     visualize_satellites_mutual_access(
@@ -228,7 +223,7 @@ if __name__ == "__main__":
     print(f"卫星互可见性热力图已保存到文件: {png_filename}")
 
     # 写入卫星对目标可见性CSV文件
-    with open(targets_csv_filename, "w", newline="", encoding="utf-8") as f:
+    with open(sat_tgt_csv_filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         # 写入表头
         writer.writerow(["卫星-目标对", "开始时间", "结束时间", "持续时长(秒)"])
@@ -238,7 +233,7 @@ if __name__ == "__main__":
             for start_time, end_time, duration in access_times:
                 writer.writerow([sat_target_pair, start_time, end_time, duration])
 
-    print(f"卫星对目标可见性数据已保存到CSV文件: {targets_csv_filename}")
+    print(f"卫星对目标可见性数据已保存到CSV文件: {sat_tgt_csv_filename}")
     # 生成并保存卫星对目标可见性热力图
     visualize_satellites_to_targets_access(
         satellites_to_missiles_access, output_file=targets_png_filename
@@ -249,12 +244,12 @@ if __name__ == "__main__":
     from stk_server.data_processing import generate_satellite_target_visibility_data
 
     json_output_filename = (
-        get_data_dir() / f"satellite_target_visibility_data_{timestamp}.json"
+            get_data_dir() / f"satellite_target_visibility_data_{timestamp}.json"
     )
 
     structured_data = generate_satellite_target_visibility_data(
         # "C:\\Users\\kkai\\Desktop\\zhejianglab\\stk_gen\\data\\satellites_to_targets_access_20250712_172718.csv",
-        targets_csv_filename,
+        sat_tgt_csv_filename,
         stk_conn.scenario_begin_time,
         step=60,
         output_file=json_output_filename,  # 实时保存到文件
