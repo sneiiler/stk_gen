@@ -5,28 +5,25 @@
 """
 
 import sys
-from typing import Dict, Any, List, Set, Tuple, Optional
 from collections import Counter  # 在文件顶部导入
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 
-sys.path.append("/root/stk_gen")
-import json, re
-import logging
+# 添加项目根目录到路径
+root_dir = Path(__file__).parent.parent
+sys.path.append(str(root_dir))
+
 from datetime import datetime
 from pydantic import BaseModel
 from collections import defaultdict
-from icecream import ic, install
+from icecream import install
+
+install()
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
-
-install()
 from utils.misc_utils import get_data_dir, get_project_root
-
-
-class ValidationInput(BaseModel):
-    input_user_data: List[dict]
-    output_resoning_data: List[str]
-    output_result_data: List[list]
+from misc_tools.sharegpt_utils import load_sharegpt_data, ValidationInput
 
 
 class ValidationResult(BaseModel):
@@ -50,63 +47,7 @@ class ClusterDataValidator:
             file_path: 日志记录器，如果为None则使用默认配置
         """
 
-        self.input_data = self.load_data(file_path)
-
-    def load_data(self, file_path: str) -> ValidationInput:
-        """加载数据
-
-        Args:
-            file_path: 数据文件路径
-
-        Returns:
-            数据列表
-        """
-        # ensure file_path is string for suffix checks
-        file_path_str = str(file_path)
-        raw_data = []
-        input_user_data = []
-        output_resoning_data = []
-        output_result_data = []
-
-        if file_path_str.endswith(".json"):
-            # 如果是JSON文件，直接加载
-            with open(file_path, "r", encoding="utf-8") as file:
-                raw_data = json.load(file)
-        elif file_path_str.endswith(".jsonl"):
-            # 如果是JSONL文件，逐行加载
-            with open(file_path, "r", encoding="utf-8") as file:
-                for line in file:
-                    # 移除行尾的换行符
-                    cleaned_line = line.strip()
-                    if cleaned_line:  # 确保非空行
-                        # 解析JSON
-                        data = json.loads(cleaned_line)
-                        raw_data.append(data)
-        
-        for line_index, line_data in enumerate(raw_data):
-            for message in line_data["messages"]:
-                if message["role"] == "user":
-                    input_user_data.append(json.loads(message["content"]))
-                if message["role"] == "assistant":
-                    # 使用正则表达式匹配 </thionk> 后面到下一个 ``` 之间的内容
-                    pattern = r"<think>(.*?)</think>(.*?)\[(.*)\]$$"
-                    match = re.search(pattern, message["content"], re.DOTALL)
-                    if match:
-                        try:
-                            output_resoning_data.append(match.group(1))
-                            # 先去除所有反斜杠，避免解析失败
-                            group3_cleaned = match.group(3).replace("\\", "")
-                            output_result_data.append(
-                                json.loads("[" + group3_cleaned + "]")
-                            )
-                        except json.JSONDecodeError as e:
-                            print("JSON 解析失败:", e)
-                            raise ValueError(f"JSON 解析失败: {e}")
-        return ValidationInput(
-            input_user_data=input_user_data,
-            output_resoning_data=output_resoning_data,
-            output_result_data=output_result_data,
-        )
+        self.input_data = load_sharegpt_data(file_path)
 
     def validate_output(self):
         """验证输出结果
@@ -152,9 +93,9 @@ class ClusterDataValidator:
         return validation_result
 
     def _validate_target_coverage(
-        self,
-        input_data: ValidationInput,
-        result: List[ValidationResult],
+            self,
+            input_data: ValidationInput,
+            result: List[ValidationResult],
     ) -> None:
         """验证卫星分配
 
@@ -203,9 +144,9 @@ class ClusterDataValidator:
             }
 
     def _validate_satellite_assignment(
-        self,
-        input_data: ValidationInput,
-        result: List[ValidationResult],
+            self,
+            input_data: ValidationInput,
+            result: List[ValidationResult],
     ) -> None:
         """验证卫星分配
 
@@ -277,9 +218,9 @@ class ClusterDataValidator:
             }
 
     def _validate_minimize_clusters(
-        self,
-        input_data: ValidationInput,
-        result: List[ValidationResult],
+            self,
+            input_data: ValidationInput,
+            result: List[ValidationResult],
     ) -> None:
         """验证最小分簇原则
         Args:
@@ -327,7 +268,7 @@ class ClusterDataValidator:
                     result[index].details["merge_candidates"] = merge_candidates
 
 
-def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = None,image_title: str = "数据推理结果"):
+def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = None, image_title: str = "数据推理结果"):
     """
     绘制输入目标数量 vs 目标覆盖率的气泡图，气泡大小表示数据点数量，
     并在图片下方添加覆盖率分段统计注释
@@ -366,35 +307,34 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     # 构建注释文本
     annotation = (
         f"覆盖率分段统计（样本总数: {total})：\n"
-        f">100%: {count_gt_100} ({count_gt_100/total:.1%})    "
-        f"100%: {count_100} ({count_100/total:.1%})    "
-        f"90~100%: {count_90_100} ({count_90_100/total:.1%})    "
-        f"80~90%: {count_80_90} ({count_80_90/total:.1%})    "
-        f"<80%: {count_lt_80} ({count_lt_80/total:.1%})"
+        f">100%: {count_gt_100} ({count_gt_100 / total:.1%})    "
+        f"100%: {count_100} ({count_100 / total:.1%})    "
+        f"90~100%: {count_90_100} ({count_90_100 / total:.1%})    "
+        f"80~90%: {count_80_90} ({count_80_90 / total:.1%})    "
+        f"<80%: {count_lt_80} ({count_lt_80 / total:.1%})"
     )
 
     # 创建图表
     fig, ax = plt.subplots(figsize=(10, 8))
-    
+
     # 计算点的频率用于气泡大小
     data_points = list(zip(input_nums, coverage_rates))
     point_counter = Counter(data_points)
-    
+
     # 绘制气泡图
     from matplotlib.colors import Normalize
-    import matplotlib.cm as cm
     norm = Normalize(vmin=min(coverage_rates), vmax=max(coverage_rates))
-    
+
     # 创建一个ScalarMappable用于颜色映射
     cmap = plt.colormaps['viridis']
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])  # 必须设置一个空数组
-    
+
     # 绘制气泡图
     for (x, y), count in point_counter.items():
-        ax.scatter(x, y, s=count*50, alpha=0.6, 
-                    color=cmap(norm(y)), edgecolors='black', linewidth=0.5)
-    
+        ax.scatter(x, y, s=count * 50, alpha=0.6,
+                   color=cmap(norm(y)), edgecolors='black', linewidth=0.5)
+
     # 尝试使用系统中已安装的中文字体
     try:
         font_path = get_project_root() / "utils/simhei.ttf"
@@ -413,11 +353,11 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
 
     # 设置坐标轴范围
     ax.set_xlim(min(input_nums) - 1, max(input_nums) + 1)
-    ax.set_ylim(min(coverage_rates) - 0.05, max(coverage_rates)+ 0.02)
+    ax.set_ylim(min(coverage_rates) - 0.05, max(coverage_rates) + 0.02)
 
     # 添加网格和样式优化
     ax.grid(True, linestyle="--", alpha=0.6)
-    
+
     # 添加颜色条（使用先前创建的ScalarMappable）
     cbar = fig.colorbar(sm, ax=ax, pad=0.01)
     cbar.ax.set_ylabel("结果目标覆盖率", fontproperties=chinese_font)
@@ -426,7 +366,7 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     fig = plt.gcf()
     fig.subplots_adjust(bottom=0.15)  # 留出空间放注释
     fig.text(
-        0.48, 0.02, annotation, ha="center", va="bottom", 
+        0.48, 0.02, annotation, ha="center", va="bottom",
         fontsize=12, fontproperties=chinese_font,
         bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round,pad=0.2')
     )
@@ -438,7 +378,7 @@ def plot_coverage(results: List[ValidationResult], save_path: Optional[str] = No
     else:
         plt.tight_layout()
         plt.show()
-    
+
     plt.close()
 
 
@@ -446,7 +386,7 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     data_path = (
-        get_data_dir() / "training_data_sharegpt_gpt-o4mini-o3_20250618_v1.jsonl"
+            get_data_dir() / "clustering_results_cmax_20001.jsonl"
     )
     # data_path = (
     #     get_data_dir() / "training_data_sharegpt_qwen3_235B_A22B_20250626_113625_30_v2.jsonl"
@@ -454,17 +394,19 @@ def main():
     # data_path = (
     #     get_data_dir() / "training_data_sharegpt_gemini-2.5-pro_20250629_103625_30_v3.jsonl"
     # )
-    data_path = (
-        get_data_dir() / "training_data_sharegpt_qwen3-4b_20250701_191138_24_v5.jsonl"
-    )
+    # data_path = (
+    #     get_data_dir() / "training_data_sharegpt_qwen3-4b_20250701_191138_24_v5.jsonl"
+    # )
     # image_title = "Qwen3 235B-A22B 数据推理结果"
     # image_title = "Google Gemini-2.5-pro-250605 数据推理结果"
     # image_title = "OpenAI GPT-o3/o4mini 数据推理结果"
-    image_title = "Qwen3 4B 数据推理结果"
+    # image_title = "Qwen3 4B 数据推理结果"
+    image_title = "max_overlap_alg"
     validator = ClusterDataValidator(file_path=data_path)
     data = validator.validate_output()
 
-    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-51:-4]}.png"), image_title=image_title)
+    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-5:-4]}.png"),
+                  image_title=image_title)
     print(len(data))
 
 

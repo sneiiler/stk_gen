@@ -1,16 +1,16 @@
 import json
 import sys
-from pathlib import Path
-import numpy as np
 from collections import defaultdict
+from pathlib import Path
 from typing import List
-import matplotlib.pyplot as plt
-import matplotlib
-import math
-from PIL import Image
 
+import matplotlib
+import matplotlib.pyplot as plt
+from PIL import Image
 from matplotlib.font_manager import FontProperties
 from tqdm import tqdm
+
+from data_classes.sft_data_models import SatelliteClusterClearOutput, SatelliteClusterOutput
 
 # 设置matplotlib支持中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']
@@ -25,7 +25,12 @@ sys.path.append(str(root_dir))
 from utils.misc_utils import get_data_dir, get_documents_dir, get_project_root
 
 
-def load_data(file_path: Path) -> List[dict]:
+def load_cluster_data(file_path:Path)-> List[SatelliteClusterOutput]:
+    data = json.loads(file_path.read_text())
+    return data
+
+
+def load_raw_data(file_path: Path) -> List[dict]:
     """
     按时间切片加载数据，将同一时间戳下的所有卫星数据聚合在一起
 
@@ -252,7 +257,8 @@ def get_time_slice_summary(time_slices: List[dict]) -> dict:
     return summary
 
 
-def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_slice_index: int = 0, save_path: str = None, global_target_colors: dict = None):
+def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_slice_index: int = 0,
+                                            save_path: str = None, global_target_colors: dict = None):
     """
     在平面地图上可视化卫星和目标的位置，并显示卫星-目标可见性连接线
 
@@ -439,7 +445,7 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
 
             # 绘制连接线
             plt.plot([sat_lon, target_lon], [sat_lat, target_lat],
-                    color=color, linewidth=1.5, alpha=0.7, linestyle='-')
+                     color=color, linewidth=1.5, alpha=0.7, linestyle='-')
 
             # 统计连接数
             if target_id not in target_visibility_count:
@@ -450,18 +456,19 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
     # 添加可见性连接线的图例项（总统计）
     if visibility_count > 0:
         plt.plot([], [], color='#6C757D', linewidth=2, alpha=0.8, linestyle='-',
-                label=f'可见性连接 ({visibility_count}条)')
+                 label=f'可见性连接 ({visibility_count}条)')
 
     # 设置标题和标签
-    plt.title(f'卫星和目标位置分布图（含可见性连接）\n时间切片: {time_slice_index + 1}, 时间戳: {data_frame["timestamp"]}',
-              fontsize=14, fontproperties=chinese_font, pad=20)
+    plt.title(
+        f'卫星和目标位置分布图（含可见性连接）\n时间切片: {time_slice_index + 1}, 时间戳: {data_frame["timestamp"]}',
+        fontsize=14, fontproperties=chinese_font, pad=20)
     plt.xlabel('经度 (度)', fontproperties=chinese_font, fontsize=12)
     plt.ylabel('纬度 (度)', fontproperties=chinese_font, fontsize=12)
 
     # 添加图例到绘图区域上方 - 使用现代样式
     plt.legend(bbox_to_anchor=(0.5, -0.08), loc='upper center', ncol=3, fontsize=10,
-              frameon=True, fancybox=True, shadow=True, framealpha=0.9,
-              edgecolor='#E9ECEF', facecolor='white')
+               frameon=True, fancybox=True, shadow=True, framealpha=0.9,
+               edgecolor='#E9ECEF', facecolor='white')
 
     # 设置坐标轴刻度 - 使用现代样式
     plt.xticks(range(-180, 181, 30), fontsize=10, color='#495057')
@@ -493,7 +500,7 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
     if save_path:
         # 使用固定的边界框，确保图片大小一致
         plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0.1,
-                   facecolor='white', edgecolor='none')
+                    facecolor='white', edgecolor='none')
         print(f"图片已保存到: {save_path}")
         # plt.show()
     else:
@@ -501,15 +508,16 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
 
     plt.close()
 
+
 # 示例使用
 if __name__ == "__main__":
     # 加载真实数据
-    data_file = get_data_dir() / "satellite_target_visibility_data.json"
+    data_file = get_data_dir() / "satellite_target_visibility_data_sc1.json"
 
     if not data_file.exists():
         exit("数据文件不存在，使用模拟数据...")
 
-    time_slices = load_data(data_file)
+    time_slices = load_raw_data(data_file)
 
     print(f"成功加载 {len(time_slices)} 个时间切片")
 
@@ -528,7 +536,7 @@ if __name__ == "__main__":
     # 显示前几个时间切片的详细信息
     print("\n前3个时间切片详情:")
     for i, slice_data in enumerate(time_slices[:3]):
-        print(f"\n时间切片 {i+1}:")
+        print(f"\n时间切片 {i + 1}:")
         print(f"  时间戳: {slice_data['timestamp']}")
         print(f"  时间偏移: {slice_data['time_offset_from_scenario_start']}秒")
 
@@ -544,7 +552,7 @@ if __name__ == "__main__":
         # 显示目标信息
         if slice_data['target_visibility']:
             targets = [obs.get('to_target', {}).get('id', obs.get('target_id', 'Unknown'))
-                      for obs in slice_data['target_visibility']]
+                       for obs in slice_data['target_visibility']]
             print(f"  观测目标: {list(set(targets))}")
 
         # 显示连接信息
@@ -563,11 +571,11 @@ if __name__ == "__main__":
         global_target_colors = create_global_target_colors(time_slices)
         print(f"为 {len(global_target_colors)} 个目标分配了固定颜色: {list(global_target_colors.keys())}")
 
-        for index in tqdm(range(len(time_slices)),desc="生成可视化图片"):
+        for index in tqdm(range(len(time_slices)), desc="生成可视化图片"):
             visualize_fig_save_path = visualize_dir / f"satellite_target_map_{index:03d}.png"
             visualize_satellites_and_targets_on_map(time_slices, time_slice_index=index,
-                                                   save_path=str(visualize_fig_save_path),
-                                                   global_target_colors=global_target_colors)
+                                                    save_path=str(visualize_fig_save_path),
+                                                    global_target_colors=global_target_colors)
     except Exception as e:
         print(f"可视化过程中出现错误: {e}")
         print("请检查数据格式和依赖库是否正确安装")
