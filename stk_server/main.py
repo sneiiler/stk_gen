@@ -475,7 +475,7 @@ if __name__ == "__main__":
         missile_data_loaded = json.load(f)
     missile_list = [MissileInfo(**item) for item in missile_data_loaded]
 
-    # missile_list=missile_list[:2]
+    missile_list=missile_list[:2]
 
     # 添加导弹到STK场景
     stk_conn.add_missile(missile_list)
