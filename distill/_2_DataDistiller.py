@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 root_dir = Path(__file__).parent.parent.parent
-print(root_dir)
 sys.path.append(str(root_dir))
 
 import json
@@ -33,9 +32,11 @@ install()
 
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
+from misc_tools.sharegpt_utils import create_sharegpt_format
 from data_classes.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
+    SatelliteClusterClearOutput,
     SatelliteClusterOutput,
     ShareGPTFormat,
     ShareGPTMessage,
@@ -158,7 +159,7 @@ class DataDistiller:
 
         # 创建输出解析器
         self.output_parser = PydanticOutputParser(
-            pydantic_object=SatelliteClusterOutput
+            pydantic_object=SatelliteClusterClearOutput
         )
 
         print(f"Gemini数据蒸馏器初始化完成:")
@@ -245,10 +246,15 @@ class DataDistiller:
             )
             system_prompt = re.sub(r"\s+", " ", system_prompt)
 
+            print(system_prompt)
+
+
             messages = [
                 {"role": "system", "content": system_prompt.strip()},
                 {"role": "user", "content": user_content.strip()},
             ]
+            ic(messages)
+            exit()
 
             # 创建流式请求 - 针对Gemini优化
             response = self.client.chat.completions.create(
@@ -289,10 +295,11 @@ class DataDistiller:
                 if reasoning_content:
                     cot = f"{reasoning_content}\n思考过程总结:\n{cot}"
 
-                result = SatelliteClusterOutput(
+                result = SatelliteClusterClearOutput(
                     chain_of_thought=cot,
                     clusters=[
                         ClusterInfo(
+                            timestamp="",
                             cluster_id=cluster.cluster_id,
                             master=cluster.master,
                             sats=cluster.sats,
@@ -315,26 +322,7 @@ class DataDistiller:
             print(error_msg)
             return None, "", error_msg
 
-    def create_sharegpt_format(
-        self, instruction: str, input_data: str, output_data: str
-    ) -> ShareGPTFormat:
-        """创建ShareGPT格式的训练数据。
 
-        Args:
-            instruction: 指令内容
-            input_data: 输入数据
-            output_data: 输出数据
-
-        Returns:
-            ShareGPT格式的数据
-        """
-        return ShareGPTFormat(
-            messages=[
-                ShareGPTMessage(role="system", content=instruction),
-                ShareGPTMessage(role="user", content=input_data),
-                ShareGPTMessage(role="assistant", content=output_data),
-            ]
-        )
 
     def process_single_item(
         self,
@@ -368,7 +356,7 @@ class DataDistiller:
             input_str = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
             output_str = result.to_think_json()
 
-            sharegpt_data = self.create_sharegpt_format(
+            sharegpt_data = create_sharegpt_format(
                 instruction=system_prompt,
                 input_data=input_str,
                 output_data=output_str,
@@ -463,7 +451,7 @@ def main():
     """主函数。"""
     # 从JSON文件加载数据
     input_file = (
-        get_data_dir() / "mock_satellite_observation_data_20250629_102830_v3.json"
+        get_data_dir() / "satellite_target_visibility_data_sc1.json"
     )
     batch_data = load_json_data(input_file)
 

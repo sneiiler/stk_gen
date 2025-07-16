@@ -708,7 +708,7 @@ def load_data(file_path: Path) -> List[dict]:
 # 示例使用
 if __name__ == "__main__":
     # 加载数据
-    data_file = get_data_dir() / "satellite_target_visibility_data.json"
+    data_file = get_data_dir() / "satellite_target_visibility_data_sc1.json"
 
     if not data_file.exists():
         print("数据文件不存在，请检查路径...")
