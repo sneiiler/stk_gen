@@ -57,11 +57,11 @@ def group_by_time_offset(input_data: List[Dict[str, Any]]) -> Dict[int, List[Dic
 
 def gaussian_sample_health() -> float:
     """使用高斯分布生成卫星健康状态。
-    
+
     使用均值为0.8的高斯分布生成健康状态，并将结果限制在0-1范围内。
     标准差设置为0.2，这样大约95%的值会落在0.4-1.2的范围内。
     结果保留两位小数。
-    
+
     Returns:
         float: 0到1之间的健康状态值，保留两位小数
     """
@@ -69,6 +69,38 @@ def gaussian_sample_health() -> float:
     value = np.random.normal(0.8, 0.2)
     # 将值限制在0-1范围内并保留两位小数
     return round(max(0.0, min(1.0, value)), 2)
+
+
+def calculate_quality_from_distance(distance: float) -> float:
+    """根据距离计算质量值
+
+    距离为3000km时质量最佳(1.0)，距离偏离3000km时质量相应减少。
+    质量值范围为0.2到1.0。
+
+    Args:
+        distance: 距离值（单位：千米），通常范围为100~5000km
+
+    Returns:
+        float: 质量值，范围为0.2到1.0，保留两位小数
+    """
+    optimal_distance = 3000.0  # 最佳距离
+    min_quality = 0.2  # 最小质量值
+    max_quality = 1.0  # 最大质量值
+
+    # 计算距离偏差
+    distance_deviation = abs(distance - optimal_distance)
+
+    # 使用指数衰减函数计算质量
+    # 当距离偏差为0时，质量为1.0
+    # 当距离偏差增大时，质量指数衰减
+    # 衰减系数调整为使得在距离范围边界(100km和5000km)时质量接近最小值
+    decay_factor = 0.0008  # 调整这个值可以控制衰减速度
+    quality = max_quality * math.exp(-decay_factor * distance_deviation)
+
+    # 确保质量值不低于最小值
+    quality = max(min_quality, quality)
+
+    return round(quality, 2)
 
 
 def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstellationDataModel]:
@@ -161,8 +193,8 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
 
                 if conn_key not in processed_connections:
                     sat_edges.append(SatelliteEdge(
-                        from_id=from_id,
-                        to_id=to_id,
+                        from_sat=from_id,
+                        to_sat=to_id,
                         distance=round(sat_distances[sat_distance_idx],2)
                     ))
                     sat_distance_idx += 1
@@ -178,10 +210,14 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
                     target_edges.append(TargetEdge(
                         sat_id=from_id,
                         target_id=to_id,
-                        quality=round(target_distances[target_distance_idx],2)
+                        quality=calculate_quality_from_distance(target_distances[target_distance_idx])
                     ))
                     target_distance_idx += 1
                     processed_targets.add(target_key)
+
+        # 确保timestamp不为None，如果为None则使用默认值
+        if timestamp is None:
+            timestamp = "1970-01-01T00:00:00Z"  # 默认时间戳
 
         converted_data.append(RawConstellationDataModel(
             timestamp=timestamp,
@@ -203,94 +239,13 @@ def main():
 
     # 获取当前时间戳
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = get_data_dir() / f"training_data_raw_{timestamp}.json"
+    output_file = get_data_dir() / f"training_data_raw_{timestamp}.jsonl"
 
-    target_distances=[]
-    for timeslice in converted_data:
-        print(timeslice.sat_edges)
-        for target_edge in timeslice.target_edges:
-            target_distances.append(target_edge.quality)
-
-    target_distances = []
-    for timeslice in converted_data:
-        print(timeslice.sat_edges)
-        for target_edge in timeslice.target_edges:
-            target_distances.append(target_edge.quality)
-
-    # 分析target_distances的分布情况
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from collections import Counter
-
-    if target_distances:
-        distances_array = np.array(target_distances)
-
-        print(f"\n=== Target Distance 分布分析 ===")
-        print(f"总数据点: {len(target_distances)}")
-        print(f"最小值: {np.min(distances_array):.2f}")
-        print(f"最大值: {np.max(distances_array):.2f}")
-        print(f"平均值: {np.mean(distances_array):.2f}")
-        print(f"中位数: {np.median(distances_array):.2f}")
-        print(f"标准差: {np.std(distances_array):.2f}")
-        print(f"25%分位数: {np.percentile(distances_array, 25):.2f}")
-        print(f"75%分位数: {np.percentile(distances_array, 75):.2f}")
-        print(f"95%分位数: {np.percentile(distances_array, 95):.2f}")
-
-        # 分段统计
-        ranges = [
-            (0, 1000, "0-1000"),
-            (1000, 5000, "1000-5000"),
-            (5000, 10000, "5000-10000"),
-            (10000, 20000, "10000-20000"),
-            (20000, float('inf'), "20000+")
-        ]
-
-        print(f"\n=== 距离分段统计 ===")
-        for min_val, max_val, label in ranges:
-            count = sum(1 for d in target_distances if min_val <= d < max_val)
-            percentage = (count / len(target_distances)) * 100
-            print(f"{label}: {count} ({percentage:.1f}%)")
-
-        # 绘制分布图
-        plt.figure(figsize=(12, 4))
-
-        plt.subplot(1, 2, 1)
-        plt.hist(target_distances, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
-        plt.xlabel('Target Distance')
-        plt.ylabel('Frequency')
-        plt.title('Target Distance Distribution')
-        plt.grid(True, alpha=0.3)
-
-        plt.subplot(1, 2, 2)
-        plt.boxplot(target_distances)
-        plt.ylabel('Target Distance')
-        plt.title('Target Distance Box Plot')
-        plt.grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        plt.savefig('sc_1_target_distance_analysis.png', dpi=300, bbox_inches='tight')
-        plt.show()
-
-        # 查找异常值 (IQR方法)
-        Q1 = np.percentile(distances_array, 25)
-        Q3 = np.percentile(distances_array, 75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-
-        outliers = [d for d in target_distances if d < lower_bound or d > upper_bound]
-        print(f"\n=== 异常值检测 (IQR方法) ===")
-        print(f"下界: {lower_bound:.2f}")
-        print(f"上界: {upper_bound:.2f}")
-        print(f"异常值数量: {len(outliers)}")
-        if outliers:
-            print(f"异常值范围: {min(outliers):.2f} - {max(outliers):.2f}")
-    else:
-        print("❌ 未找到 target_distances 数据")
     # 写入输出文件
     with open(output_file, "w", encoding="utf-8") as f:
-        for i, result in enumerate(converted_data):
+        for result in converted_data:
             f.write(result.model_dump_json()+ "\n")
+    print(f"转换完成! 结果已保存到: {output_file}")
 
 
 if __name__ == "__main__":

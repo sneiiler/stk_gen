@@ -19,12 +19,12 @@ class SatelliteEdge(BaseModel):
     """卫星间连接关系模型
     
     Attributes:
-        from_id: 起始卫星ID
-        to_id: 目标卫星ID
+        from_sat: 起始卫星ID
+        to_sat: 目标卫星ID
         distance: 卫星距离，单位km
     """
-    from_id: int = Field(..., description="起始卫星ID")
-    to_id: int = Field(..., description="目标卫星ID")
+    from_sat: int = Field(..., description="起始卫星ID")
+    to_sat: int = Field(..., description="目标卫星ID")
     distance: float = Field(..., description="卫星距离，单位km")
 
 
