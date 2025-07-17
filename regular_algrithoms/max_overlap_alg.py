@@ -556,7 +556,7 @@ if __name__ == "__main__":
         exit()
 
     time_slices = load_data(data_file)
-    time_slices = time_slices[18:19]
+    # time_slices = time_slices[1:19]
     print(f"成功加载 {len(time_slices)} 个时间切片")
 
     # 执行分簇

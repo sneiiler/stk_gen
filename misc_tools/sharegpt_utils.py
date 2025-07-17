@@ -5,6 +5,7 @@ ShareGPT格式数据处理工具函数
 """
 
 import json
+from pathlib import Path
 import re
 from typing import List
 from pydantic import BaseModel
@@ -38,7 +39,7 @@ def create_sharegpt_format(instruction: str, input_data: str, output_data: str) 
     )
 
 
-def load_sharegpt_data(file_path: str) -> ValidationInput:
+def load_sharegpt_data(file_path: str | Path) -> ValidationInput:
     """加载ShareGPT格式的数据文件
 
     Args:
