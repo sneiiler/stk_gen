@@ -38,8 +38,6 @@ from data_classes.sft_data_models import (
     RawConstellationDataModel,
     SatelliteClusterClearOutput,
     SatelliteClusterOutput,
-    ShareGPTFormat,
-    ShareGPTMessage,
 )
 from dotenv import load_dotenv
 
@@ -353,17 +351,16 @@ class DataDistiller:
                 return
 
             # 构造ShareGPT格式的训练数据
-            input_str = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-            output_str = result.to_think_json()
+            input_data = RawConstellationDataModel(**data)
 
             sharegpt_data = create_sharegpt_format(
                 instruction=system_prompt,
-                input_data=input_str,
-                output_data=output_str,
+                input_data=input_data,
+                output_data=result,
             )
 
             # 写入成功结果
-            writer.write_line(sharegpt_data.model_dump_json())
+            writer.write_line(sharegpt_data.to_sharegpt_json())
             stats_queue.put("success")
 
         except Exception as e:
