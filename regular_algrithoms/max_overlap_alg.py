@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Tuple
 from pathlib import Path
 import json
 from collections import defaultdict
@@ -10,7 +10,121 @@ from tqdm import tqdm
 
 from misc_tools.sharegpt_utils import create_sharegpt_format
 from utils.misc_utils import get_data_dir
-from data_classes.sft_data_models import ClusterInfo, SatelliteClusterOutput, ShareGPTFormat
+from data_classes.sft_data_models import ClusterInfo, SatelliteClusterOutput, LLMConversationMessage, RawConstellationDataModel, SatelliteAttributes, SatelliteEdge, TargetEdge
+
+
+def convert_time_slice_to_model(time_slice: dict) -> RawConstellationDataModel:
+    """
+    将time_slice数据转换为RawConstellationDataModel格式
+    
+    Args:
+        time_slice: 原始时间切片数据，示例格式:
+        {
+            "timestamp": "2024-01-01T00:00:00Z",
+            "time_offset_from_scenario_start": 0,
+            "satellites": [
+                {
+                    "id": "Satellite1",
+                    "health": 10.0,
+                    "position": [7000.0, 0.0, 0.0]
+                }
+            ],
+            "inter_satellite_connectivity": [
+                {
+                    "from_satellite": {
+                        "id": "Satellite1",
+                        "position": [7000.0, 0.0, 0.0]
+                    },
+                    "to_satellite": {
+                        "id": "Satellite2", 
+                        "position": [7000.0, 1000.0, 0.0]
+                    },
+                    "connection_quality": 0.8,
+                    "visibility_time_window": [0, 100]
+                }
+            ],
+            "target_visibility": [
+                {
+                    "from_satellite": {
+                        "id": "Satellite1",
+                        "position": [7000.0, 0.0, 0.0]
+                    },
+                    "to_target": {
+                        "id": "m1",
+                        "position": [6371.0, 100.0, 0.0]
+                    },
+                    "target_value": 1.0,
+                    "observation_priority": 1,
+                    "visibility_time_window": [10, 90]
+                }
+            ]
+        }
+        
+    Returns:
+        转换后的RawConstellationDataModel对象
+    """
+    # 提取卫星属性
+    sat_attrs = []
+    satellites = time_slice.get("satellites", [])
+    for sat in satellites:
+        sat_id = int(sat["id"].replace("Satellite", "")) if "Satellite" in sat["id"] else int(sat["id"])
+        sat_attrs.append(SatelliteAttributes(
+            id=sat_id,
+            health=sat.get("health", 10.0),  # 默认健康状态为10
+            pos=sat.get("position", [0.0, 0.0, 0.0])
+        ))
+    
+    # 提取卫星间连接关系
+    sat_edges = []
+    inter_connectivity = time_slice.get("inter_satellite_connectivity", [])
+    for conn in inter_connectivity:
+        from_sat_id = conn["from_satellite"]["id"]
+        to_sat_id = conn["to_satellite"]["id"]
+        
+        # 提取数字部分
+        from_id = int(from_sat_id.replace("Satellite", "")) if "Satellite" in from_sat_id else int(from_sat_id)
+        to_id = int(to_sat_id.replace("Satellite", "")) if "Satellite" in to_sat_id else int(to_sat_id)
+        
+        # 计算距离
+        from_pos = conn["from_satellite"]["position"]
+        to_pos = conn["to_satellite"]["position"]
+        distance = round(math.sqrt(sum((p1 - p2) ** 2 for p1, p2 in zip(from_pos, to_pos))),2)
+        
+        sat_edges.append(SatelliteEdge(
+            from_sat=from_id,
+            to_sat=to_id,
+            distance=distance
+        ))
+    
+    # 提取目标连接关系
+    target_edges = []
+    target_visibility = time_slice.get("target_visibility", [])
+    for vis in target_visibility:
+        sat_id = vis["from_satellite"]["id"]
+        target_id = vis["to_target"]["id"]
+        
+        # 提取数字部分
+        sat_num = int(sat_id.replace("Satellite", "")) if "Satellite" in sat_id else int(sat_id)
+        target_num = int(target_id.replace("m", "")) if "m" in target_id else int(target_id)
+        
+        # 计算连接质量（基于可见时间窗口长度）
+        window = vis.get("visibility_time_window", [])
+        quality = (window[1] - window[0]) / 100.0 if len(window) == 2 else 0.5  # 归一化到0-1，默认0.5
+        quality = min(1.0, max(0.0, quality))  # 确保在0-1范围内
+        
+        target_edges.append(TargetEdge(
+            sat_id=sat_num,
+            target_id=target_num,
+            quality=quality
+        ))
+    
+    return RawConstellationDataModel(
+        timestamp=time_slice["timestamp"],
+        sat_attrs=sat_attrs,
+        sat_edges=sat_edges,
+        target_edges=target_edges,
+        history_cluster_result=None  # 暂时设为None，可以后续扩展
+    )
 
 
 class SatelliteClusteringAlgorithm:
@@ -171,7 +285,7 @@ class SatelliteClusteringAlgorithm:
         """
         connectivity = time_slice.get("inter_satellite_connectivity", [])
         if not connectivity:
-            return []
+            return SatelliteClusterOutput(chain_of_thought="无卫星连接数据", clusters=[])
 
         # 构建矩阵
         insight_matrix, cost_matrix, overlap_dict, sat_target_vis = self.build_matrices(
@@ -446,7 +560,7 @@ class SatelliteClusteringAlgorithm:
 
 def cluster_satellites(
     time_slices: List[dict], c_max: float
-) -> List[ShareGPTFormat]:
+) -> List[LLMConversationMessage]:
     """
     对所有时间切片进行卫星分簇
 
@@ -458,18 +572,19 @@ def cluster_satellites(
         按时间戳组织的分簇结果
     """
     algorithm = SatelliteClusteringAlgorithm(c_max=c_max)
-    results: List[ShareGPTFormat] = []
+    results: List[LLMConversationMessage] = []
 
     # 构造ShareGPT格式的训练数据
 
     for time_slice in tqdm(time_slices):
-        input_str = json.dumps(time_slice, ensure_ascii=False, separators=(",", ":"))
+        # 将time_slice数据转换为RawConstellationDataModel格式
+        input_data = convert_time_slice_to_model(time_slice)
         cluster: SatelliteClusterOutput= algorithm.solve_clustering(time_slice)
         results.append(
             create_sharegpt_format(
                 instruction="max_overlap_alg",
-                input_data=input_str,
-                output_data=cluster.to_think_json(),
+                input_data=input_data,
+                output_data=cluster,
             )
         )
 
@@ -556,19 +671,19 @@ if __name__ == "__main__":
         exit()
 
     time_slices = load_data(data_file)
-    # time_slices = time_slices[1:19]
+    # time_slices = time_slices[1:10]
     print(f"成功加载 {len(time_slices)} 个时间切片")
 
     # 执行分簇
     clustering_results = cluster_satellites(time_slices, c_max=2000.0)
 
     # 将结果保存为JSONL文件，每个时间切片对应一行
-    output_file = get_data_dir() / "clustering_results_cmax_20001.jsonl"
+    output_file = get_data_dir() / "clustering_results_cmax_200011.jsonl"
 
     # 写入JSONL文件
     with open(output_file, "w", encoding="utf-8") as f:
         for i, result in enumerate(clustering_results):
-            f.write(result.model_dump_json()+ "\n")
+            f.write(result.to_sharegpt_json()+ "\n")
 
     print(f"\n分簇结果已保存到: {output_file}")
     print(f"共保存了 {len(clustering_results)} 个时间切片的分簇结果")
