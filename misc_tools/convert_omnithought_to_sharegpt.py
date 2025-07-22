@@ -107,14 +107,17 @@ def convert_file(input_path: str, output_path: str) -> None:
             # 每处理1000条记录打印进度
             if converted_count % 1000 == 0:
                 print(f"已处理 {converted_count} 条记录...")
+            # 每处理1000条记录打印进度
+            if converted_count == 5000:
+                break
     
     print(f"转换完成! 共处理 {converted_count} 条记录")
 
 
 def main():
     """主函数"""
-    input_file = "./data/OmniThought-0528-sample.jsonl"
-    output_path = "./data/OmniThought-0528-sample_sharegpt.jsonl"
+    input_file = "/mnt/saves-wu-nas/shifan/kaifeng/datasets/OmniThought-0528/OmniThought-R1-0528.jsonl"
+    output_path = "/mnt/saves-wu-nas/shifan/kaifeng/datasets/OmniThought-0528/OmniThought-R1-0528_sharegpt_50k.jsonl"
     # 检查输入文件是否存在
     if not os.path.exists(input_file):
         print(f"错误: 输入文件不存在: {input_file}", file=sys.stderr)
