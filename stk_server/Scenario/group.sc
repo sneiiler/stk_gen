@@ -106,7 +106,6 @@ BEGIN Scenario
         Module		 STKIntegrationv12.2
         Module		 STKParallelComputingv12.2
         Module		 STKProfessionalv12.2
-        Module		 STKTandE
         Module		 STKv12.2
         Module		 SatelliteCollectionv12.2
         Module		 TERNv12.2
@@ -1357,7 +1356,7 @@ BEGIN Scenario
 
                 StartTime		 6 Jun 2025 04:00:00.000000000
                 EndTime		 7 Jun 2025 04:00:00.000000000
-                CurrentTime		 6 Jun 2025 04:58:24.000000000
+                CurrentTime		 6 Jun 2025 05:26:21.000000000
                 Direction		 Forward
                 UpdateDelta		 3
                 RefreshDelta		 0.010000
@@ -2167,61 +2166,6 @@ BEGIN Scenario
 
     BEGIN SubObjects
 
-        Class Missile
-
-            m1		
-            m10		
-            m11		
-            m12		
-            m13		
-            m14		
-            m15		
-            m16		
-            m17		
-            m18		
-            m19		
-            m2		
-            m20		
-            m21		
-            m22		
-            m23		
-            m24		
-            m25		
-            m26		
-            m27		
-            m28		
-            m29		
-            m3		
-            m30		
-            m31		
-            m32		
-            m33		
-            m34		
-            m35		
-            m36		
-            m37		
-            m38		
-            m39		
-            m4		
-            m40		
-            m41		
-            m42		
-            m43		
-            m44		
-            m45		
-            m46		
-            m47		
-            m48		
-            m49		
-            m5		
-            m50		
-            m6		
-            m7		
-            m8		
-            m9		
-
-        END Class
-
         Class Satellite
 
             Satellite111		
@@ -2268,156 +2212,6 @@ BEGIN Scenario
     BEGIN References
         Instance *
             *		
-        END Instance
-        Instance Missile/m1
-            Missile/m1		
-        END Instance
-        Instance Missile/m10
-            Missile/m10		
-        END Instance
-        Instance Missile/m11
-            Missile/m11		
-        END Instance
-        Instance Missile/m12
-            Missile/m12		
-        END Instance
-        Instance Missile/m13
-            Missile/m13		
-        END Instance
-        Instance Missile/m14
-            Missile/m14		
-        END Instance
-        Instance Missile/m15
-            Missile/m15		
-        END Instance
-        Instance Missile/m16
-            Missile/m16		
-        END Instance
-        Instance Missile/m17
-            Missile/m17		
-        END Instance
-        Instance Missile/m18
-            Missile/m18		
-        END Instance
-        Instance Missile/m19
-            Missile/m19		
-        END Instance
-        Instance Missile/m2
-            Missile/m2		
-        END Instance
-        Instance Missile/m20
-            Missile/m20		
-        END Instance
-        Instance Missile/m21
-            Missile/m21		
-        END Instance
-        Instance Missile/m22
-            Missile/m22		
-        END Instance
-        Instance Missile/m23
-            Missile/m23		
-        END Instance
-        Instance Missile/m24
-            Missile/m24		
-        END Instance
-        Instance Missile/m25
-            Missile/m25		
-        END Instance
-        Instance Missile/m26
-            Missile/m26		
-        END Instance
-        Instance Missile/m27
-            Missile/m27		
-        END Instance
-        Instance Missile/m28
-            Missile/m28		
-        END Instance
-        Instance Missile/m29
-            Missile/m29		
-        END Instance
-        Instance Missile/m3
-            Missile/m3		
-        END Instance
-        Instance Missile/m30
-            Missile/m30		
-        END Instance
-        Instance Missile/m31
-            Missile/m31		
-        END Instance
-        Instance Missile/m32
-            Missile/m32		
-        END Instance
-        Instance Missile/m33
-            Missile/m33		
-        END Instance
-        Instance Missile/m34
-            Missile/m34		
-        END Instance
-        Instance Missile/m35
-            Missile/m35		
-        END Instance
-        Instance Missile/m36
-            Missile/m36		
-        END Instance
-        Instance Missile/m37
-            Missile/m37		
-        END Instance
-        Instance Missile/m38
-            Missile/m38		
-        END Instance
-        Instance Missile/m39
-            Missile/m39		
-        END Instance
-        Instance Missile/m4
-            Missile/m4		
-        END Instance
-        Instance Missile/m40
-            Missile/m40		
-        END Instance
-        Instance Missile/m41
-            Missile/m41		
-        END Instance
-        Instance Missile/m42
-            Missile/m42		
-        END Instance
-        Instance Missile/m43
-            Missile/m43		
-        END Instance
-        Instance Missile/m44
-            Missile/m44		
-        END Instance
-        Instance Missile/m45
-            Missile/m45		
-        END Instance
-        Instance Missile/m46
-            Missile/m46		
-        END Instance
-        Instance Missile/m47
-            Missile/m47		
-        END Instance
-        Instance Missile/m48
-            Missile/m48		
-        END Instance
-        Instance Missile/m49
-            Missile/m49		
-        END Instance
-        Instance Missile/m5
-            Missile/m5		
-        END Instance
-        Instance Missile/m50
-            Missile/m50		
-        END Instance
-        Instance Missile/m6
-            Missile/m6		
-        END Instance
-        Instance Missile/m7
-            Missile/m7		
-        END Instance
-        Instance Missile/m8
-            Missile/m8		
-        END Instance
-        Instance Missile/m9
-            Missile/m9		
         END Instance
         Instance Satellite/Satellite111
             Satellite/Satellite111		

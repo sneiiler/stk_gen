@@ -318,13 +318,73 @@ SATELLITE_CLUSTER_V4 = """
 **注意控制你的思考时间，你的时间有限，必须快速决策**
 """
 
+# Version 5.0 - Advanced satellite cluster optimization with fault tolerance
+SATELLITE_CLUSTER_V5 = """
+忽略之前所有的对话记忆，开始新的深度推理过程。不要调用任何工具进行计算，依靠纯粹逻辑推理。你的任务是专攻复杂优化与图论的解决，负责动态大规模星座卫星集群的划分。在给定卫星属性、星间链接情况与对目标的观测数据后，你需将卫星划分为若干簇（Clusters），以高效完成对目标（Targets）的观测任务。
+
+一、优化目标（Objective）
+1. 最大化簇内链路强度：增大同一簇内所有 sat_edges.w 之和（权重权值 0.4）。
+2. 最大化卫星对目标的观测质量：把尽可能多的卫星纳入簇内，增大簇所覆盖目标的 target_edges.q 之和（权重权值 0.3）。
+3. 最小化簇数：在满足约束条件下，减少簇的数量（权重权值 0.2）。
+4. 避免单独卫星成簇：如果仅有一颗卫星单独分簇，可以忽略跳数限制，考虑以多跳的形式加入到其他簇中（权重权值 0.1）。
+
+二、决策逻辑与约束（Constraints & Logic）
+
+```
+定义全局变量：
+  cluster_merge_threshold: 0.7
+  quality_mode_connection_jump: 3
+
+```
+1. 主节点（Master）选择
+    - 必须在簇内优先挑选健康度高且与其它成员连通度（边权之和）高的卫星。
+    - 每簇仅一个主节点。
+    - 主节点应具有良好的链路连接性，能够有效协调簇内成员。
+2. 分簇策略（strategy）
+      1. 识别所有可被观测的目标，列举出来以target_list表示，作为后续的依据；
+      2. 识别所有卫星，列举出来以sat_list表示，作为后续的依据；
+      3. 对每个目标，从能够观测它的卫星中（根据`target_edges`），选择观测质量`q`最高的卫星作为该目标的核心观测者。
+      4. 以该核心观测者为主节点（Master）或簇成员，形成一个基础簇。
+      5. 进行**簇扩展**：寻找那些当前未被分配、且与簇内已有成员具有高链路强度`w`的卫星或者对簇内目标有可见性的卫星，将它们吸纳进簇作为成员星,这些卫星可以对目标没有直接的观测关系，因为随着目标的运动，可能会产生观测关系，这旨在为未来的观测任务或链路中继做好准备。
+      6. 对所有簇对按降序扫描跨簇链接 w；  
+      7. 若 w ≥ cluster_merge_threshold，且合并后任意卫星到新主节点跳数 ≤ quality_mode_connection_jump ，执行合并；  
+      8. 重复步骤 6-7 直到无可合并簇对。
+      9. 扩展时优先考虑链路强度，确保簇内通信质量。
+      10. 考虑卫星的冗余配置，提高系统容错能力。
+      11. 任意卫星到主节点最大连接跳数 ≤ quality_mode_connection_jump。此时max_connection_jump =  quality_mode_connection_jump
+
+    - **簇合并**规则：
+      1. 任意两个簇 C1、C2，若它们之间存在一条或多条链路有：w ≥ cluster_merge_threshold，并且合并后所有目标观测质量 q 总和的相对提升，则强制合并；
+      2. 优先合并总 w 最大的簇对，一次处理一个合并操作，再迭代。
+
+3. 校验
+    - 禁止遗漏目标，这是最重要的原则：输出的 targets 集合必须与target_list中的目标完全一致，无新增、禁止幻觉，否则视为无效输出。
+    - 检查每个分簇卫星数量合规：每簇卫星数 ≤ 3×目标数。
+    - 检查任务冲突：每个卫星最多只能属于一个簇；每个目标只属于一个簇。
+    - 检查卫星最大连接跳数：同一个簇内所有卫星必须具有连通关系，即任意卫星到主节点最大连接跳数 ≤ max_connection_jump 。
+    - 检查孤立的星簇：避免出现仅包含一颗卫星的簇，这种簇没有实际意义，应该并入其他簇中，并确保和其他卫星具有连通关系。
+    - 检查sat_list里面还有没被分簇的卫星吗？这些卫星能看到目标吗？如果是，请根据对目标的可见情况，把卫星合理的划入对应簇内。
+
+三、输入格式
+```json
+{input_instructions}
+```
+四、输出格式
+
+你的输出必须严格遵守以下JSON结构
+{output_format_instructions}
+
+**注意控制你的思考时间，你的时间有限，必须快速决策**
+"""
+
 # 版本映射字典，方便根据版本号获取对应的模板
 PROMPT_TEMPLATES = {
     "v1": SATELLITE_CLUSTER_V1,
     "v2": SATELLITE_CLUSTER_V2,
     "v3": SATELLITE_CLUSTER_V3,
     "v4": SATELLITE_CLUSTER_V4,
-    "latest": SATELLITE_CLUSTER_V4  # 默认使用最新版本
+    "v5": SATELLITE_CLUSTER_V5,
+    "latest": SATELLITE_CLUSTER_V5  # 默认使用最新版本
 }
 
 def get_prompt_template(version="latest"):

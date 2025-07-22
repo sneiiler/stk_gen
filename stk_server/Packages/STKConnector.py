@@ -1214,13 +1214,13 @@ class STKConnector:
         return access_list
 
 
-    def get_satellites_mutual_access(self) -> Dict[str, List[Tuple[str, str, float]]]:
+    def get_satellites_mutual_access(self) -> Dict[str, Dict[str, List[Tuple[str, str, float]]]]:
         """
         计算场景中所有卫星两两之间的可见性。
 
         Returns:
-            Dict[str, List[Tuple[str, str, float]]]:
-                键为"卫星A-卫星B"，值为可见弧段的(开始时间, 结束时间, 持续时长(秒))元组列表。
+            Dict[str, Dict[str, List[Tuple[str, str, float]]]]:
+                格式为 {卫星A: {卫星B: [(开始时间, 结束时间, 持续时长(秒))]}}
         """
         paths = self.get_objects("Satellite")
         result = {}
@@ -1233,8 +1233,20 @@ class STKConnector:
                     access = sat_a.GetAccessToObject(sat_b)
                     access.ComputeAccess()
                     intervals = access.ComputedAccessIntervalTimes
-                    key = f"{sat_a.InstanceName}-{sat_b.InstanceName}"
-                    result[key] = []
+
+                    sat_a_name = sat_a.InstanceName
+                    sat_b_name = sat_b.InstanceName
+
+                    # 初始化卫星字典
+                    if sat_a_name not in result:
+                        result[sat_a_name] = {}
+                    if sat_b_name not in result:
+                        result[sat_b_name] = {}
+
+                    # 双向存储（对称性）
+                    result[sat_a_name][sat_b_name] = []
+                    result[sat_b_name][sat_a_name] = []
+
                     if intervals.Count:
                         for t0, t1 in intervals.ToArray(0, -1):
                             # 将时间字符串转换为datetime对象
@@ -1242,17 +1254,18 @@ class STKConnector:
                             t1_dt = datetime.datetime.strptime(t1, "%d %b %Y %H:%M:%S.%f")
                             # 计算持续时长（秒）
                             duration = (t1_dt - t0_dt).total_seconds()
-                            result[key].append((t0, t1, duration))
+                            result[sat_a_name][sat_b_name].append((t0, t1, duration))
+                            result[sat_b_name][sat_a_name].append((t0, t1, duration))
                     pbar.update(1)
         return result
 
-    def get_satellites_to_missiles_access(self) -> Dict[str, List[Tuple[str, str, float]]]:
+    def get_satellites_to_missiles_access(self) -> Dict[str, Dict[str, List[Tuple[str, str, float]]]]:
         """
         计算所有卫星传感器对目标的可见性。
 
         Returns:
-            Dict[str, List[Tuple[str, str, float]]]:
-                键为"卫星-目标"，值为可见弧段的(开始时间, 结束时间, 持续时长(秒))元组列表。
+            Dict[str, Dict[str, List[Tuple[str, str, float]]]]:
+                格式为 {卫星ID: {目标ID: [(开始时间, 结束时间, 持续时长(秒))]}}
         """
         # 获取所有卫星的传感器
         sensors_list = self.get_satellite_sensor()
@@ -1264,6 +1277,12 @@ class STKConnector:
                 if sensor_info["full_path"] == "None":
                     continue
                 sensor = self.root.GetObjectFromPath(sensor_info["full_path"])
+                satellite_id = sensor_info['satellite']
+
+                # 初始化卫星字典
+                if satellite_id not in result:
+                    result[satellite_id] = {}
+
                 for tgt_path in tgt_paths:
                     if tgt_path == "None":
                         continue
@@ -1272,8 +1291,8 @@ class STKConnector:
                         access = tgt.GetAccessToObject(sensor)
                         access.ComputeAccess()
                         intervals = access.ComputedAccessIntervalTimes
-                        key = f"{sensor_info['satellite']}-{tgt.InstanceName}"
-                        result[key] = []
+                        target_id = tgt.InstanceName
+                        result[satellite_id][target_id] = []
                         if intervals.Count:
                             for t0, t1 in intervals.ToArray(0, -1):
                                 # 将时间字符串转换为datetime对象
@@ -1281,7 +1300,7 @@ class STKConnector:
                                 t1_dt = datetime.datetime.strptime(t1, "%d %b %Y %H:%M:%S.%f")
                                 # 计算持续时长（秒）
                                 duration = (t1_dt - t0_dt).total_seconds()
-                                result[key].append((t0, t1, duration))
+                                result[satellite_id][target_id].append((t0, t1, duration))
                     except Exception as e:
                         print(f"处理目标 {tgt_path} 时出错: {str(e)}")
                         continue
