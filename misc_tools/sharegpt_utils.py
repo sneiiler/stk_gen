@@ -59,7 +59,6 @@ def load_sharegpt_data(file_path: str | Path) -> List[LLMConversationMessage]:
                     raw_data.append(data)
 
     for index,line_data in enumerate(raw_data):
-        print(f"current index:{index}")
         instruction = ""
         input_data = None
         response_data = None
