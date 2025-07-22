@@ -177,7 +177,20 @@ def visualize_satellites_to_targets_access(
     else:
         plt.show()
 
-
+def gaussian_sample_health() -> float:
+    """使用高斯分布生成卫星健康状态。
+    
+    使用均值为0.8的高斯分布生成健康状态，并将结果限制在0-1范围内。
+    标准差设置为0.2，这样大约95%的值会落在0.4-1.2的范围内。
+    结果保留两位小数。
+    
+    Returns:
+        float: 0到1之间的健康状态值，保留两位小数
+    """
+    # 使用高斯分布生成值，均值0.8，标准差0.2
+    value = np.random.normal(0.8, 0.2)
+    # 将值限制在0-1范围内并保留两位小数
+    return round(max(0.0, min(1.0, value)), 2)
 
 def generate_satellite_target_visibility_data(
     satellites_to_targets_access: Dict[str, Dict[str, List[Tuple[str, str, float]]]],
@@ -468,14 +481,14 @@ if __name__ == "__main__":
 
     # 读取并转为 MissileInfo 对象
     with open(
-            get_data_dir() / "missile_route_info_v20250713_085322.json",
+            get_data_dir() / "missile_route_info_scenario_3.json",
             "r",
             encoding="utf-8",
     ) as f:
         missile_data_loaded = json.load(f)
     missile_list = [MissileInfo(**item) for item in missile_data_loaded]
 
-    missile_list=missile_list[:2]
+    # missile_list=missile_list[:2]
 
     # 添加导弹到STK场景
     stk_conn.add_missile(missile_list)
@@ -484,9 +497,9 @@ if __name__ == "__main__":
 
     # 生成带时间戳的文件名
     timestamp = get_current_timestamp()
-    png_filename = get_data_dir() / f"stk_satellites_mutual_access_{timestamp}.png"
-    targets_png_filename = get_data_dir() / f"satellites_to_targets_access_{timestamp}.png"
-    json_output_filename = get_data_dir() / f"satellite_target_visibility_data_{timestamp}.json"
+    png_filename = get_data_dir() / f"stk_satellites_mutual_access_scenario_3_{timestamp}.png"
+    targets_png_filename = get_data_dir() / f"satellites_to_targets_access_scenario_3_{timestamp}.png"
+    json_output_filename = get_data_dir() / f"satellite_target_visibility_data_scenario_3_{timestamp}.json"
 
     # 生成并保存卫星互可见性热力图
     visualize_satellites_mutual_access(
@@ -506,7 +519,7 @@ if __name__ == "__main__":
         satellites_to_targets_access=satellites_to_missiles_access,
         satellites_mutual_access=satellites_mutual_access,
         scenario_begin_time=stk_conn.scenario_begin_time,
-        step=60,
+        step=10,
         output_file=json_output_filename,  # 实时保存到文件
     )
     print(f"结构化卫星-目标可见性数据已保存到: {json_output_filename}")
