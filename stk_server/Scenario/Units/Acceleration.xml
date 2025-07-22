@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <UnitConversion Label="m/s^2" Multiplier="1" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="meter per second squared" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="meters per second squared" Multiplier="1" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="ft/s^2" Multiplier="0.3048" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="feet per second squared" Multiplier="0.3048" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="g" Multiplier="9.80665" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-</UnitConversions>

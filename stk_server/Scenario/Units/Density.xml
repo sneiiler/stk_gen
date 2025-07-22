@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<UnitConversions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <UnitConversion Label="kg/m^3" Multiplier="1" Offset="0" ShowInUi="true" Default="true" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="g/cm^3" Multiplier="1000" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="lb/yd^3" Multiplier="0.593276" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="lb/ft^3" Multiplier="0.062428" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="lb/in^3" Multiplier="3.61273E-05" Offset="0" ShowInUi="true" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-  <UnitConversion Label="slug/ft^3" Multiplier="515.5" Offset="0" ShowInUi="false" Default="false" DefaultLarge="false" DefaultNormal="false" DefaultSmall="false" />
-</UnitConversions>

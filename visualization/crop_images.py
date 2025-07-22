@@ -145,7 +145,7 @@ def crop_images_to_reference(input_dir, output_dir=None, reference_image=None):
 def main():
     parser = argparse.ArgumentParser(description="将图片裁剪成与参考图片相同的尺寸")
     parser.add_argument("--input-dir", "-i", 
-                       default="documents/visualize_figs_scenario_1",
+                       default="visualization/visualize_figs_scenario_1_test",
                        help="输入图片目录 (默认: documents/visualize_figs)")
     parser.add_argument("--output-dir", "-o", 
                        default=None,

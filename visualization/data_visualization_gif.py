@@ -1,31 +1,37 @@
 import json
 import sys
-from pathlib import Path
-import numpy as np
 from collections import defaultdict
+from pathlib import Path
 from typing import List
-import matplotlib.pyplot as plt
-import matplotlib
-import math
-from PIL import Image
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
 from matplotlib.font_manager import FontProperties
 from tqdm import tqdm
+
+from data_classes.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput
 
 # 设置matplotlib支持中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']
 matplotlib.rcParams['axes.unicode_minus'] = False
 
+from misc_tools.sharegpt_utils import load_sharegpt_data
 from stk_server.Packages.Tools import ecef2lla
 
 root_dir = Path(__file__).parent.parent
-print(root_dir)
 sys.path.append(str(root_dir))
 
 from utils.misc_utils import get_data_dir, get_documents_dir, get_project_root
 
 
-def load_data(file_path: Path) -> List[dict]:
+def load_cluster_data(file_path:Path)-> List[SatelliteClusterOutput]:
+    data = json.loads(file_path.read_text())
+    return data
+
+
+def load_raw_data(file_path: Path) -> List[dict]:
     """
     按时间切片加载数据，将同一时间戳下的所有卫星数据聚合在一起
 
@@ -165,6 +171,187 @@ def create_global_target_colors(time_slices: List[dict]) -> dict:
     return target_colors
 
 
+def create_global_cluster_colors(clustor_data) -> dict:
+    """
+    为所有时间切片中出现的分簇创建全局颜色映射，确保同一分簇在不同时间切片中使用相同颜色
+    
+    Args:
+        clustor_data: 分簇数据对象
+        
+    Returns:
+        dict: 分簇ID到颜色的映射字典
+    """
+    # 使用新的分簇连续性分析
+    continuity_analysis = analyze_cluster_continuity(clustor_data)
+    return continuity_analysis['stable_cluster_colors']
+
+
+def analyze_cluster_continuity(clustor_data) -> dict:
+    """
+    分析分簇的连续性，基于目标重叠度进行分簇跟踪和重新编号
+    
+    Args:
+        clustor_data: 分簇数据对象
+        
+    Returns:
+        dict: 包含稳定分簇映射的字典，结构为：
+        {
+            'cluster_mapping': {timestamp: {original_id: stable_id}},
+            'stable_cluster_colors': {stable_id: color},
+            'stable_cluster_shapes': {stable_id: shape}
+        }
+    """
+    # 提取所有时间切片的分簇数据
+    time_cluster_data = []
+    for clustor in clustor_data.output_result_data:
+        timestamp_clusters = {}
+        for cluster_item in clustor:
+            timestamp = cluster_item.get('timestamp')
+            if timestamp not in timestamp_clusters:
+                timestamp_clusters[timestamp] = []
+            
+            if 'clusters' in cluster_item:
+                for cluster_dict in cluster_item['clusters']:
+                    cluster_info = {
+                        'cluster_id': cluster_dict.get('cluster_id'),
+                        'targets': set(cluster_dict.get('targets', [])),
+                        'sats': set(cluster_dict.get('sats', []))
+                    }
+                    timestamp_clusters[timestamp].append(cluster_info)
+            elif isinstance(cluster_item, dict) and 'cluster_id' in cluster_item:
+                cluster_info = {
+                    'cluster_id': cluster_item.get('cluster_id'),
+                    'targets': set(cluster_item.get('targets', [])),
+                    'sats': set(cluster_item.get('sats', []))
+                }
+                timestamp_clusters[timestamp].append(cluster_info)
+        
+        time_cluster_data.append(timestamp_clusters)
+    
+    # 按时间戳排序，获取所有时间切片
+    all_timestamps = set()
+    for timestamp_clusters in time_cluster_data:
+        all_timestamps.update(timestamp_clusters.keys())
+    sorted_timestamps = sorted(all_timestamps)
+    
+    # 初始化稳定分簇跟踪
+    stable_cluster_counter = 0
+    cluster_mapping = {}  # {timestamp: {original_id: stable_id}}
+    stable_clusters_history = {}  # {stable_id: [targets_set_per_timestamp]}
+    
+    # 颜色和形状列表
+    base_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
+                   '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+                   '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D5A6BD']
+    shapes = ['rectangle', 'circle', 'diamond', 'hexagon', 'rounded_rect', 'triangle', 'octagon']
+    
+    def calculate_overlap_ratio(targets1, targets2):
+        """计算两个目标集合的重叠率"""
+        if not targets1 or not targets2:
+            return 0.0
+        intersection = len(targets1.intersection(targets2))
+        union = len(targets1.union(targets2))
+        return intersection / union if union > 0 else 0.0
+    
+    def find_best_match(current_cluster, previous_stable_clusters, threshold=0.3):
+        """为当前分簇找到最佳的稳定分簇匹配"""
+        best_match = None
+        best_ratio = threshold
+        
+        for stable_id, history in previous_stable_clusters.items():
+            if history:  # 确保历史记录存在
+                last_targets = history[-1]
+                overlap_ratio = calculate_overlap_ratio(current_cluster['targets'], last_targets)
+                if overlap_ratio > best_ratio:
+                    best_ratio = overlap_ratio
+                    best_match = stable_id
+        
+        return best_match, best_ratio
+    
+    # 逐时间切片处理
+    for timestamp in sorted_timestamps:
+        cluster_mapping[timestamp] = {}
+        current_clusters = []
+        
+        # 收集当前时间戳的所有分簇
+        for timestamp_clusters in time_cluster_data:
+            if timestamp in timestamp_clusters:
+                current_clusters.extend(timestamp_clusters[timestamp])
+        
+        if not current_clusters:
+            continue
+        
+        # 第一个时间切片，直接分配稳定ID
+        if not stable_clusters_history:
+            for cluster in current_clusters:
+                stable_id = stable_cluster_counter
+                cluster_mapping[timestamp][cluster['cluster_id']] = stable_id
+                stable_clusters_history[stable_id] = [cluster['targets']]
+                stable_cluster_counter += 1
+        else:
+            # 为当前分簇寻找最佳匹配
+            used_stable_ids = set()
+            unmatched_clusters = []
+            
+            # 按目标数量从大到小排序，优先处理大分簇
+            current_clusters.sort(key=lambda x: len(x['targets']), reverse=True)
+            
+            for cluster in current_clusters:
+                best_match, overlap_ratio = find_best_match(cluster, stable_clusters_history)
+                
+                if best_match is not None and best_match not in used_stable_ids:
+                    # 找到匹配，使用已有的稳定ID
+                    cluster_mapping[timestamp][cluster['cluster_id']] = best_match
+                    stable_clusters_history[best_match].append(cluster['targets'])
+                    used_stable_ids.add(best_match)
+                    print(f"时间戳 {timestamp}: 分簇 {cluster['cluster_id']} -> 稳定分簇 {best_match} (重叠率: {overlap_ratio:.2f})")
+                else:
+                    # 没有找到匹配，标记为未匹配
+                    unmatched_clusters.append(cluster)
+            
+            # 为未匹配的分簇分配新的稳定ID
+            for cluster in unmatched_clusters:
+                stable_id = stable_cluster_counter
+                cluster_mapping[timestamp][cluster['cluster_id']] = stable_id
+                stable_clusters_history[stable_id] = [cluster['targets']]
+                stable_cluster_counter += 1
+                print(f"时间戳 {timestamp}: 分簇 {cluster['cluster_id']} -> 新稳定分簇 {stable_id}")
+    
+    # 生成稳定分簇的颜色和形状映射
+    all_stable_ids = list(stable_clusters_history.keys())
+    stable_cluster_colors = {}
+    stable_cluster_shapes = {}
+    
+    for i, stable_id in enumerate(sorted(all_stable_ids)):
+        stable_cluster_colors[stable_id] = base_colors[i % len(base_colors)]
+        stable_cluster_shapes[stable_id] = shapes[i % len(shapes)]
+    
+    print(f"\n分簇连续性分析完成:")
+    print(f"- 总共识别出 {len(all_stable_ids)} 个稳定分簇")
+    print(f"- 分簇映射关系: {len(cluster_mapping)} 个时间戳")
+    
+    return {
+        'cluster_mapping': cluster_mapping,
+        'stable_cluster_colors': stable_cluster_colors,
+        'stable_cluster_shapes': stable_cluster_shapes
+    }
+
+
+def create_global_cluster_shapes(clustor_data) -> dict:
+    """
+    为所有分簇创建全局形状映射，确保同一分簇在不同时间切片中使用相同形状
+    
+    Args:
+        clustor_data: 分簇数据对象
+        
+    Returns:
+        dict: 分簇ID到形状的映射字典
+    """
+    # 使用新的分簇连续性分析
+    continuity_analysis = analyze_cluster_continuity(clustor_data)
+    return continuity_analysis['stable_cluster_shapes']
+
+
 def get_time_slice_summary(time_slices: List[dict]) -> dict:
     """
     获取时间切片数据的摘要信息
@@ -252,21 +439,52 @@ def get_time_slice_summary(time_slices: List[dict]) -> dict:
     return summary
 
 
-def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_slice_index: int = 0, save_path: str = None, global_target_colors: dict = None):
+def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], 
+                                            clustor_data,  # 类型为ValidationInput
+                                            time_slice_index: int = 0,
+                                            save_path: str|Path|None = None, 
+                                            global_target_colors: dict|None = None,
+                                            global_cluster_colors: dict|None = None,
+                                            global_cluster_shapes: dict|None = None,
+                                            cluster_mapping: dict|None = None):
     """
     在平面地图上可视化卫星和目标的位置，并显示卫星-目标可见性连接线
 
     Args:
         all_data_frame: 时间切片数据列表
+        clustor_data: 分簇数据
         time_slice_index: 要可视化的时间切片索引，默认为0（第一个时间切片）
         save_path: 保存图片的路径，如果为None则显示图片
         global_target_colors: 全局目标颜色映射字典，确保不同时间切片中同一目标使用相同颜色
+        global_cluster_colors: 全局分簇颜色映射字典，确保不同时间切片中同一分簇使用相同颜色
+        global_cluster_shapes: 全局分簇形状映射字典，确保不同时间切片中同一分簇使用相同形状
+        cluster_mapping: 分簇连续性映射字典，{timestamp: {original_id: stable_id}}
     """
     if not all_data_frame or time_slice_index >= len(all_data_frame):
         print("无效的时间切片索引或空数据")
         return
 
     data_frame = all_data_frame[time_slice_index]
+
+    current_clustor = None
+    for clustor in clustor_data.output_result_data:
+        if clustor[0]['timestamp'] == data_frame['timestamp']:
+            current_clustor = clustor
+            break
+    
+    # 解析分簇数据
+    current_clusters = []
+    if current_clustor:
+        for cluster_item in current_clustor:
+            if 'clusters' in cluster_item:
+                # 将字典转换为ClusterInfo对象
+                for cluster_dict in cluster_item['clusters']:
+                    cluster_info = ClusterInfo(**cluster_dict)
+                    current_clusters.append(cluster_info)
+            # 处理直接的分簇列表（从ShareGPT数据中解析出来的）
+            elif isinstance(cluster_item, dict) and 'cluster_id' in cluster_item:
+                cluster_info = ClusterInfo(**cluster_item)
+                current_clusters.append(cluster_info)
 
     # 提取卫星位置并转换为经纬度
     satellite_lats = []
@@ -378,28 +596,55 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
     # 添加网格 - 使用更现代的样式
     plt.grid(True, alpha=0.4, color='#E9ECEF', linewidth=0.8, linestyle='-')
 
-    # 绘制卫星（小圆点）- 使用现代蓝色
-    if satellite_lats:
-        plt.scatter(satellite_lons, satellite_lats, c='#4361EE', s=60, marker='o',
-                    label=f'卫星 ({len(satellite_lats)}个)', alpha=0.8, edgecolors='#023047', linewidth=1.5)
+    # 检查分簇数据
+    if current_clusters:
+        print(f"找到 {len(current_clusters)} 个分簇，正在绘制分簇框...")
+        draw_clusters_after_positions = True
+    else:
+        draw_clusters_after_positions = False
 
-        # 添加卫星ID标签（保持标签完整性，不影响绘图区域布局）
+    # 绘制卫星 - 使用原来的统一样式
+    if satellite_lats:
+        # 使用统一的卫星样式绘制所有卫星，调整边框颜色和粗细
+        plt.scatter(satellite_lons, satellite_lats, 
+                   c='#4361EE', s=80, alpha=0.9, marker='o', 
+                   edgecolors='#2C3E50', linewidth=0.8, 
+                   label=f'卫星 ({len(satellite_lats)})', zorder=5)
+
+        # 添加卫星ID标签
         for lon, lat, sat_id in zip(satellite_lons, satellite_lats, satellite_ids):
             plt.annotate(sat_id, (lon, lat), xytext=(5, 5), textcoords='offset points',
                          fontsize=8, alpha=0.9, color='#023047', fontproperties=chinese_font,
-                         clip_on=False, weight='bold')  # 允许标签超出绘图区域，保持完整性
+                         clip_on=False, weight='bold')
 
-    # 绘制目标（五角星）- 使用现代红色
+    # 绘制目标 - 使用原来的统一样式
     if target_lats:
-        unique_targets = len(set(zip(target_lons, target_lats)))
-        plt.scatter(target_lons, target_lats, c='#F72585', s=120, marker='*',
-                    label=f'目标 ({unique_targets}个)', alpha=0.9, edgecolors='#C73E1D', linewidth=1.5)
+        # 使用统一的目标样式绘制所有目标，调整边框颜色和粗细
+        plt.scatter(target_lons, target_lats, 
+                   c='#F72585', s=120, alpha=0.9, marker='*', 
+                   edgecolors='#8B2635', linewidth=0.8, 
+                   label=f'目标 ({len(target_lats)})', zorder=5)
 
-        # 添加目标ID标签（保持标签完整性，不影响绘图区域布局）
+        # 添加目标ID标签
         for lon, lat, target_id in zip(target_lons, target_lats, target_ids):
             plt.annotate(target_id, (lon, lat), xytext=(5, 5), textcoords='offset points',
                          fontsize=8, alpha=0.9, color='#C73E1D', fontproperties=chinese_font,
-                         clip_on=False, weight='bold')  # 允许标签超出绘图区域，保持完整性
+                         clip_on=False, weight='bold')
+
+    # 绘制分簇形状框（在收集完所有位置信息后）
+    cluster_legend_info = []
+    if draw_clusters_after_positions and current_clusters:
+        try:
+            # 获取当前时间戳的分簇映射
+            current_timestamp = data_frame['timestamp']
+            current_cluster_mapping = cluster_mapping.get(current_timestamp, {}) if cluster_mapping else {}
+            
+            cluster_legend_info = create_cluster_colors_and_draw_shapes(
+                current_clusters, satellite_positions, target_positions, 
+                global_cluster_colors, global_cluster_shapes, current_cluster_mapping)
+            print(f"成功绘制了 {len(current_clusters)} 个分簇的形状框")
+        except Exception as e:
+            print(f"绘制分簇形状框时出错: {e}")
 
     # 绘制卫星-目标可见性连接线（不同目标使用不同颜色）
     visibility_count = 0
@@ -439,7 +684,7 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
 
             # 绘制连接线
             plt.plot([sat_lon, target_lon], [sat_lat, target_lat],
-                    color=color, linewidth=1.5, alpha=0.7, linestyle='-')
+                     color=color, linewidth=1.5, alpha=0.7, linestyle='-')
 
             # 统计连接数
             if target_id not in target_visibility_count:
@@ -450,18 +695,28 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
     # 添加可见性连接线的图例项（总统计）
     if visibility_count > 0:
         plt.plot([], [], color='#6C757D', linewidth=2, alpha=0.8, linestyle='-',
-                label=f'可见性连接 ({visibility_count}条)')
+                 label=f'可见性连接 ({visibility_count}条)')
+
+    # 添加分簇图例项
+    if cluster_legend_info:
+        for cluster_info in cluster_legend_info:
+            # 为每个分簇创建一个图例项，显示形状、颜色和统计信息
+            # 不需要实际绘制patch，只使用颜色信息
+            plt.plot([], [], color=cluster_info['color'], linewidth=3, alpha=0.9,
+                    label=f'分簇{cluster_info["cluster_id"]} ({cluster_info["shape_name"]}) - '
+                          f'{cluster_info["satellite_count"]}卫星, {cluster_info["target_count"]}目标')
 
     # 设置标题和标签
-    plt.title(f'卫星和目标位置分布图（含可见性连接）\n时间切片: {time_slice_index + 1}, 时间戳: {data_frame["timestamp"]}',
-              fontsize=14, fontproperties=chinese_font, pad=20)
+    plt.title(
+        f'卫星和目标位置分布图（含可见性连接）\n时间切片: {time_slice_index + 1}, 时间戳: {data_frame["timestamp"]}',
+        fontsize=14, fontproperties=chinese_font, pad=20)
     plt.xlabel('经度 (度)', fontproperties=chinese_font, fontsize=12)
     plt.ylabel('纬度 (度)', fontproperties=chinese_font, fontsize=12)
 
     # 添加图例到绘图区域上方 - 使用现代样式
     plt.legend(bbox_to_anchor=(0.5, -0.08), loc='upper center', ncol=3, fontsize=10,
-              frameon=True, fancybox=True, shadow=True, framealpha=0.9,
-              edgecolor='#E9ECEF', facecolor='white')
+               frameon=True, fancybox=True, shadow=True, framealpha=0.9,
+               edgecolor='#E9ECEF', facecolor='white')
 
     # 设置坐标轴刻度 - 使用现代样式
     plt.xticks(range(-180, 181, 30), fontsize=10, color='#495057')
@@ -493,23 +748,180 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], time_sli
     if save_path:
         # 使用固定的边界框，确保图片大小一致
         plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0.1,
-                   facecolor='white', edgecolor='none')
+                    facecolor='white', edgecolor='none')
         print(f"图片已保存到: {save_path}")
-        # plt.show()
     else:
         plt.show()
 
     plt.close()
 
+
+def create_cluster_colors_and_draw_shapes(clusters: List[ClusterInfo], 
+                                         satellite_positions: dict, 
+                                         target_positions: dict,
+                                         global_cluster_colors: dict|None = None,
+                                         global_cluster_shapes: dict|None = None,
+                                         cluster_mapping: dict|None = None) -> list:
+    """
+    为分簇创建同色系颜色映射并绘制形状框
+    
+    Args:
+        clusters: 分簇信息列表
+        satellite_positions: 卫星位置映射
+        target_positions: 目标位置映射
+        global_cluster_colors: 全局分簇颜色映射字典，确保不同时间切片中同一分簇使用相同颜色
+        global_cluster_shapes: 全局分簇形状映射字典，确保不同时间切片中同一分簇使用相同形状
+        cluster_mapping: 当前时间戳的分簇映射，{original_id: stable_id}
+        
+    Returns:
+        list: 图例信息列表
+    """
+    from matplotlib.patches import Rectangle, Circle, Polygon, FancyBboxPatch
+    import numpy as np
+    
+    # 使用全局颜色映射或创建新的映射
+    if global_cluster_colors is None:
+        # 基础颜色（浅色用于填充/内框）
+        base_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
+                       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9']
+        
+        cluster_color_map = {}
+        for i, cluster in enumerate(clusters):
+            cluster_color_map[cluster.cluster_id] = base_colors[i % len(base_colors)]
+    else:
+        cluster_color_map = global_cluster_colors
+    
+    # 使用全局形状映射或创建新的映射
+    if global_cluster_shapes is None:
+        shapes = ['rectangle', 'circle', 'diamond', 'hexagon', 'rounded_rect', 'triangle', 'octagon']
+        cluster_shape_map = {}
+        for i, cluster in enumerate(clusters):
+            cluster_shape_map[cluster.cluster_id] = shapes[i % len(shapes)]
+    else:
+        cluster_shape_map = global_cluster_shapes
+    
+    # 对应的深色（用于边框）
+    def darken_color(color_hex):
+        """将颜色变深85%，使边框更深"""
+        color_hex = color_hex.lstrip('#')
+        r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+        r, g, b = int(r * 0.15), int(g * 0.15), int(b * 0.15)
+        return f'#{r:02x}{g:02x}{b:02x}'
+    
+    # 形状名称映射
+    shape_names = {'rectangle': '矩形', 'circle': '圆形', 'diamond': '菱形', 
+                   'hexagon': '六边形', 'rounded_rect': '圆角矩形', 'triangle': '三角形', 'octagon': '八边形'}
+    
+    legend_info = []
+    
+    for cluster in clusters:
+        # 使用稳定的分簇ID获取颜色和形状
+        original_id = cluster.cluster_id
+        stable_id = cluster_mapping.get(original_id, original_id) if cluster_mapping else original_id
+        
+        base_color = cluster_color_map.get(stable_id, '#FF6B6B')
+        dark_color = darken_color(base_color)
+        shape_style = cluster_shape_map.get(stable_id, 'rectangle')
+        
+        # 记录图例信息 - 显示稳定ID
+        legend_info.append({
+            'cluster_id': stable_id,  # 使用稳定ID显示
+            'original_id': original_id,  # 保留原始ID用于调试
+            'color': base_color,
+            'shape_style': shape_style,
+            'shape_name': shape_names[shape_style],
+            'satellite_count': len(cluster.sats),
+            'target_count': len(cluster.targets)
+        })
+        
+        # 绘制分簇中的卫星和目标
+        all_positions = []
+        
+        # 收集卫星位置
+        for sat_id in cluster.sats:
+            sat_id_str = f"Satellite{sat_id}"
+            if sat_id_str in satellite_positions:
+                all_positions.append(satellite_positions[sat_id_str])
+        
+        # 收集目标位置  
+        for target_id in cluster.targets:
+            target_id_str = f"m{target_id}"
+            if target_id_str in target_positions:
+                all_positions.append(target_positions[target_id_str])
+        
+        # 为每个位置绘制形状
+        for lon, lat in all_positions:
+            create_and_add_shape(lon, lat, shape_style, base_color, dark_color, 4.5)
+    
+    return legend_info
+
+
+def create_and_add_shape(lon, lat, shape_style, fill_color, border_color, size):
+    """创建并添加单个形状到图中"""
+    from matplotlib.patches import Rectangle, Circle, Polygon, FancyBboxPatch
+    import numpy as np
+    
+    if shape_style == 'rectangle':
+        shape = Rectangle((lon-size, lat-size), size*2, size*2, 
+                         linewidth=2, edgecolor=border_color, facecolor=fill_color,
+                         alpha=0.3, zorder=3)
+    
+    elif shape_style == 'circle':
+        shape = Circle((lon, lat), size, 
+                      linewidth=2, edgecolor=border_color, facecolor=fill_color,
+                      alpha=0.3, zorder=3)
+    
+    elif shape_style == 'diamond':
+        points = np.array([[lon, lat + size], [lon + size, lat], 
+                          [lon, lat - size], [lon - size, lat]])
+        shape = Polygon(points, closed=True, linewidth=2, 
+                       edgecolor=border_color, facecolor=fill_color,
+                       alpha=0.3, zorder=3)
+    
+    elif shape_style == 'hexagon':
+        angles = np.linspace(0, 2*np.pi, 7)
+        points = np.array([[lon + size*np.cos(a), lat + size*np.sin(a)] for a in angles])
+        shape = Polygon(points, closed=True, linewidth=2,
+                       edgecolor=border_color, facecolor=fill_color,
+                       alpha=0.3, zorder=3)
+    
+    elif shape_style == 'rounded_rect':
+        shape = FancyBboxPatch((lon-size, lat-size), size*2, size*2,
+                              boxstyle="round,pad=0.1", linewidth=2,
+                              edgecolor=border_color, facecolor=fill_color,
+                              alpha=0.3, zorder=3)
+    
+    elif shape_style == 'triangle':
+        h = size * np.sqrt(3) / 2
+        points = np.array([[lon, lat + h], [lon - size, lat - h/2], [lon + size, lat - h/2]])
+        shape = Polygon(points, closed=True, linewidth=2,
+                       edgecolor=border_color, facecolor=fill_color,
+                       alpha=0.3, zorder=3)
+    
+    elif shape_style == 'octagon':
+        angles = np.linspace(0, 2*np.pi, 9)
+        points = np.array([[lon + size*np.cos(a), lat + size*np.sin(a)] for a in angles])
+        shape = Polygon(points, closed=True, linewidth=2,
+                       edgecolor=border_color, facecolor=fill_color,
+                       alpha=0.3, zorder=3)
+    
+    else:
+        return
+        
+    plt.gca().add_patch(shape)
+
+
 # 示例使用
 if __name__ == "__main__":
     # 加载真实数据
-    data_file = get_data_dir() / "satellite_target_visibility_data.json"
+    data_file = get_data_dir() / "satellite_target_visibility_data_sc1.json"
 
     if not data_file.exists():
         exit("数据文件不存在，使用模拟数据...")
 
-    time_slices = load_data(data_file)
+    time_slices = load_raw_data(data_file)
+    clustor_data = load_sharegpt_data(get_data_dir() / "clustering_results_cmax_20001.jsonl")
+    # time_slices = time_slices[1:19]
 
     print(f"成功加载 {len(time_slices)} 个时间切片")
 
@@ -525,49 +937,67 @@ if __name__ == "__main__":
     print(f"- 总观测数: {summary['target_stats']['total_observations']}")
     print(f"- 平均每切片观测数: {summary['target_stats']['avg_observations_per_slice']:.2f}")
 
-    # 显示前几个时间切片的详细信息
-    print("\n前3个时间切片详情:")
-    for i, slice_data in enumerate(time_slices[:3]):
-        print(f"\n时间切片 {i+1}:")
-        print(f"  时间戳: {slice_data['timestamp']}")
-        print(f"  时间偏移: {slice_data['time_offset_from_scenario_start']}秒")
+    # # 显示前几个时间切片的详细信息
+    # print("\n前3个时间切片详情:")
+    # for i, slice_data in enumerate(time_slices[:3]):
+    #     print(f"\n时间切片 {i + 1}:")
+    #     print(f"  时间戳: {slice_data['timestamp']}")
+    #     print(f"  时间偏移: {slice_data['time_offset_from_scenario_start']}秒")
 
-        # 显示卫星信息
-        satellites = slice_data['satellites']
-        satellite_ids = [sat.get('id', 'N/A') for sat in satellites]
-        print(f"  卫星数量: {len(satellites)}")
-        print(f"  卫星ID: {satellite_ids}")
+    #     # 显示卫星信息
+    #     satellites = slice_data['satellites']
+    #     satellite_ids = [sat.get('id', 'N/A') for sat in satellites]
+    #     print(f"  卫星数量: {len(satellites)}")
+    #     print(f"  卫星ID: {satellite_ids}")
 
-        print(f"  卫星间连接数: {len(slice_data['inter_satellite_connectivity'])}")
-        print(f"  目标观测数: {len(slice_data['target_visibility'])}")
+    #     print(f"  卫星间连接数: {len(slice_data['inter_satellite_connectivity'])}")
+    #     print(f"  目标观测数: {len(slice_data['target_visibility'])}")
 
-        # 显示目标信息
-        if slice_data['target_visibility']:
-            targets = [obs.get('to_target', {}).get('id', obs.get('target_id', 'Unknown'))
-                      for obs in slice_data['target_visibility']]
-            print(f"  观测目标: {list(set(targets))}")
+    #     # 显示目标信息
+    #     if slice_data['target_visibility']:
+    #         targets = [obs.get('to_target', {}).get('id', obs.get('target_id', 'Unknown'))
+    #                    for obs in slice_data['target_visibility']]
+    #         print(f"  观测目标: {list(set(targets))}")
 
-        # 显示连接信息
-        if slice_data['inter_satellite_connectivity']:
-            connections = slice_data['inter_satellite_connectivity']
-            print(f"  连接关系示例: {connections[0] if connections else 'None'}")
-    exit()
+    #     # 显示连接信息
+    #     if slice_data['inter_satellite_connectivity']:
+    #         connections = slice_data['inter_satellite_connectivity']
+    #         print(f"  连接关系示例: {connections[0] if connections else 'None'}")
+
     # 可视化第一个时间切片的卫星和目标分布
     print("\n生成卫星和目标位置分布图...")
     try:
         # 创建可视化图片保存目录
-        visualize_dir = get_documents_dir() / "visualize_figs_scenario_1"
+        visualize_dir = get_project_root() / "visualization/visualize_figs_scenario_1_test"
         visualize_dir.mkdir(exist_ok=True)
 
+        # 进行全局分簇连续性分析
+        print("\n进行分簇连续性分析...")
+        continuity_analysis = analyze_cluster_continuity(clustor_data)
+        
         # 创建全局目标颜色映射，确保所有时间切片中同一目标使用相同颜色
         global_target_colors = create_global_target_colors(time_slices)
         print(f"为 {len(global_target_colors)} 个目标分配了固定颜色: {list(global_target_colors.keys())}")
 
-        for index in tqdm(range(len(time_slices)),desc="生成可视化图片"):
-            visualize_fig_save_path = visualize_dir / f"satellite_target_map_{index:03d}.png"
-            visualize_satellites_and_targets_on_map(time_slices, time_slice_index=index,
-                                                   save_path=str(visualize_fig_save_path),
-                                                   global_target_colors=global_target_colors)
+        # 使用连续性分析结果创建稳定的分簇颜色和形状映射
+        global_cluster_colors = continuity_analysis['stable_cluster_colors']
+        global_cluster_shapes = continuity_analysis['stable_cluster_shapes']
+        cluster_mapping = continuity_analysis['cluster_mapping']
+        
+        print(f"为 {len(global_cluster_colors)} 个稳定分簇分配了固定颜色")
+        print(f"为 {len(global_cluster_shapes)} 个稳定分簇分配了固定形状")
+
+        for index in tqdm(range(len(time_slices)), desc="生成可视化图片"):
+            visualize_fig_save_path = visualize_dir / f"satellite_target_map_with_clusters_{index:03d}.png"
+            # visualize_fig_save_path = None  # 取消注释这行来直接显示而不保存
+            visualize_satellites_and_targets_on_map(time_slices,
+                                                    clustor_data,  # 直接传递ValidationInput对象
+                                                    time_slice_index=index,
+                                                    save_path=visualize_fig_save_path,
+                                                    global_target_colors=global_target_colors,
+                                                    global_cluster_colors=global_cluster_colors,
+                                                    global_cluster_shapes=global_cluster_shapes,
+                                                    cluster_mapping=cluster_mapping)
     except Exception as e:
         print(f"可视化过程中出现错误: {e}")
         print("请检查数据格式和依赖库是否正确安装")
