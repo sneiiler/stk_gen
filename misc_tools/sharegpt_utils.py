@@ -5,54 +5,43 @@ ShareGPT格式数据处理工具函数
 """
 
 import json
+from pathlib import Path
 import re
 from typing import List
-from pydantic import BaseModel
-from data_classes.sft_data_models import ShareGPTFormat, ShareGPTMessage
+from data_classes.sft_data_models import RawConstellationDataModel, SatelliteClusterOutput, LLMConversationMessage
 
 
-class ValidationInput(BaseModel):
-    """验证输入数据模型"""
-    input_user_data: List[dict]
-    output_reasoning_data: List[str]
-    output_result_data: List[list]
-
-
-def create_sharegpt_format(instruction: str, input_data: str, output_data: str) -> ShareGPTFormat:
+def create_sharegpt_format(instruction: str, input_data: RawConstellationDataModel, output_data: SatelliteClusterOutput) -> LLMConversationMessage:
     """创建ShareGPT格式的训练数据。
 
     Args:
         instruction: 指令内容
-        input_data: 输入数据
-        output_data: 输出数据
+        input_data: 输入的卫星星座数据
+        output_data: 卫星分簇输出数据
 
     Returns:
-        ShareGPT格式的数据
+        LLMConversationMessage格式的数据
     """
-    return ShareGPTFormat(
-        messages=[
-            ShareGPTMessage(role="system", content=instruction),
-            ShareGPTMessage(role="user", content=input_data),
-            ShareGPTMessage(role="assistant", content=output_data),
-        ]
+    return LLMConversationMessage(
+        instruction=instruction,
+        input=input_data,
+        response=output_data
     )
 
 
-def load_sharegpt_data(file_path: str) -> ValidationInput:
+def load_sharegpt_data(file_path: str | Path) -> List[LLMConversationMessage]:
     """加载ShareGPT格式的数据文件
 
     Args:
         file_path: 数据文件路径，支持 .json 和 .jsonl 格式
 
     Returns:
-        ValidationInput: 包含解析后的用户输入数据、推理数据和结果数据
+        List[LLMConversationMessage]: 包含解析后的卫星分簇对话数据模型列表
     """
     # ensure file_path is string for suffix checks
     file_path_str = str(file_path)
     raw_data = []
-    input_user_data = []
-    output_resoning_data = []
-    output_result_data = []
+    validation_inputs = []
 
     if file_path_str.endswith(".json"):
         # 如果是JSON文件，直接加载
@@ -69,29 +58,45 @@ def load_sharegpt_data(file_path: str) -> ValidationInput:
                     data = json.loads(cleaned_line)
                     raw_data.append(data)
 
-    for line_index, line_data in enumerate(raw_data):
+    for index,line_data in enumerate(raw_data):
+        instruction = ""
+        input_data = None
+        response_data = None
+
         for message in line_data["messages"]:
-            if message["role"] == "user":
-                input_user_data.append(json.loads(message["content"]))
-            if message["role"] == "assistant":
-                # 使用正则表达式匹配 </think> 后面到下一个 ``` 之间的内容
+            if message["role"] == "system":
+                instruction = message["content"]
+            elif message["role"] == "user":
+                # 解析用户输入的卫星星座数据
+                input_data = RawConstellationDataModel(**json.loads(message["content"]))
+            elif message["role"] == "assistant":
+                # 使用正则表达式匹配 <think>...</think> 和后续的分簇结果
                 pattern = r"<think>(.*?)</think>(.*?)\[(.*)\]$$"
                 match = re.search(pattern, message["content"], re.DOTALL)
                 if match:
                     try:
-                        output_resoning_data.append(match.group(1))
+                        reasoning = match.group(1).strip()
                         # 先去除所有反斜杠，避免解析失败
                         group3_cleaned = match.group(3).replace("\\", "")
-                        output_result_data.append(
-                            json.loads("[" + group3_cleaned + "]")
+                        clusters_data = json.loads("[" + group3_cleaned + "]")
+
+                        # 创建 SatelliteClusterOutput 对象
+                        response_data = SatelliteClusterOutput(
+                            chain_of_thought=reasoning,
+                            clusters=clusters_data
                         )
                     except json.JSONDecodeError as e:
                         print("JSON 解析失败:", e)
                         raise ValueError(f"JSON 解析失败: {e}")
-    return ValidationInput(
-        input_user_data=input_user_data,
-        output_reasoning_data=output_resoning_data,
-        output_result_data=output_result_data,
-    )
+
+        # 如果所有必要数据都解析成功，创建 SatelliteClusteringConversation 对象
+        if instruction and input_data and response_data:
+            validation_inputs.append(LLMConversationMessage(
+                instruction=instruction,
+                input=input_data,
+                response=response_data
+            ))
+
+    return validation_inputs
 
 
