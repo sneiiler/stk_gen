@@ -10,7 +10,7 @@ class SatelliteAttributes(BaseModel):
         health: 卫星健康状态 (0-10)
         pos: 卫星位置坐标 [x, y, z]
     """
-    id: int = Field(..., description="卫星ID")
+    id: str = Field(..., description="卫星ID")
     health: float = Field(..., ge=0, le=10, description="卫星健康状态 (0-10)")
     pos: List[float] = Field(..., description="卫星ECEF位置坐标 [x, y, z] km")
 
@@ -23,8 +23,8 @@ class SatelliteEdge(BaseModel):
         to_sat: 目标卫星ID
         distance: 卫星距离，单位km
     """
-    from_sat: int = Field(..., description="起始卫星ID")
-    to_sat: int = Field(..., description="目标卫星ID")
+    from_sat: str = Field(..., description="起始卫星ID")
+    to_sat: str = Field(..., description="目标卫星ID")
     distance: float = Field(..., description="卫星距离，单位km")
 
 
@@ -36,18 +36,18 @@ class TargetEdge(BaseModel):
         target_id: 目标ID
         quality: 连接质量 (0-1)
     """
-    sat_id: int = Field(..., description="起始卫星ID")
-    target_id: int = Field(..., description="目标ID")
+    sat_id: str = Field(..., description="起始卫星ID")
+    target_id: str = Field(..., description="目标ID")
     quality: float = Field(...,description="连接质量 (0-1)")
 
 
 class ClusterInfo(BaseModel):
     """分簇信息模型"""
     timestamp: Optional[str] = Field(..., description="ISO8601格式的时间戳字符串")    
-    cluster_id: int = Field(description="分簇ID")
-    master: int = Field(description="主节点卫星ID")
-    sats: List[int] = Field(description="分簇中的卫星ID列表")
-    targets: List[int] = Field(description="分簇观测的目标ID列表")
+    cluster_id: str = Field(description="分簇ID")
+    master: str = Field(description="主节点卫星ID")
+    sats: List[str] = Field(description="分簇中的卫星ID列表")
+    targets: List[str] = Field(description="分簇观测的目标ID列表")
 
 
 class RawConstellationDataModel(BaseModel):

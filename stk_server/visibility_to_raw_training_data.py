@@ -3,8 +3,12 @@ import math
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Any
-
 import numpy as np
+import sys
+from pathlib import Path
+
+root_dir = Path(__file__).parent.parent
+sys.path.append(str(root_dir))
 
 from data_classes.sft_data_models import TargetEdge, SatelliteEdge, RawConstellationDataModel
 from stk_server.Packages.Tools import ecef_distance
@@ -164,7 +168,7 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
             # 处理目标可见性
             for target in entry["target_visibility"]:
                 from_id = sat_id
-                to_id = int(target["target_id"].replace("m", ""))
+                to_id = int(target["target_id"].replace("m", "").replace("n", ""))
                 target_key = (from_id, to_id)
 
                 if target_key not in processed_targets:
@@ -203,7 +207,7 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
             # 处理目标可见性
             for target in entry["target_visibility"]:
                 from_id = int(entry["satellite_info"]["id"].replace("Satellite", ""))
-                to_id = int(target["target_id"].replace("m", ""))
+                to_id = int(target["target_id"].replace("m", "").replace("n", ""))
                 target_key = (from_id, to_id)
 
                 if target_key not in processed_targets:
@@ -223,7 +227,8 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
             timestamp=timestamp,
             sat_attrs=sat_attrs,
             sat_edges=sat_edges,
-            target_edges=target_edges
+            target_edges=target_edges,
+            history_cluster_result=[]
         ))
 
     return converted_data
@@ -231,7 +236,7 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
 
 def main():
     # 读取输入文件
-    with open(get_data_dir() / "satellite_target_visibility_data_sc1.json", "r") as f:
+    with open(get_data_dir() / "satellite_target_visibility_data_scenario_3_20250722_204803.json", "r") as f:
         input_data = json.load(f)
 
     # 转换数据
@@ -239,7 +244,7 @@ def main():
 
     # 获取当前时间戳
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = get_data_dir() / f"training_data_raw_{timestamp}.jsonl"
+    output_file = get_data_dir() / f"training_data_raw_scenario_3_{timestamp}.jsonl"
 
     # 写入输出文件
     with open(output_file, "w", encoding="utf-8") as f:
