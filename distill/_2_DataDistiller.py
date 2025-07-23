@@ -157,7 +157,7 @@ class DataDistiller:
 
         # 创建输出解析器
         self.output_parser = PydanticOutputParser(
-            pydantic_object=SatelliteClusterClearOutput
+            pydantic_object=SatelliteClusterOutput
         )
 
         print(f"Gemini数据蒸馏器初始化完成:")
