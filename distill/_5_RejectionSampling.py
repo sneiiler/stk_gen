@@ -44,7 +44,6 @@ from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
 
 env_path = get_project_root() / ".env"
-print(env_path)
 load_dotenv(env_path)
 # 获取API配置
 api_base_openai = os.getenv("DASHSCOPE_API_BASE")
@@ -56,7 +55,6 @@ if not api_key_openai or not api_base_openai:
     raise ValueError(
         "未找到API配置，请检查环境变量 DASHSCOPE_API_KEY 和 DASHSCOPE_API_BASE"
     )
-
 
 class ThreadSafeWriter:
     """线程安全的文件写入器"""
@@ -73,7 +71,6 @@ class ThreadSafeWriter:
             with open(self.file_path, "a", encoding="utf-8") as f:
                 f.write(data + "\n")
                 f.flush()
-
 
 class RejectionSampler:
     """基于拒绝采样的多线程数据蒸馏器
@@ -96,19 +93,17 @@ class RejectionSampler:
     def __init__(
         self,
         model_name: str = "",
-        temperature: float = 0.1,
-        requests_per_minute: int = 60,
+        temperature: float = 0.6,
         previous_results: Optional[List[List[ClusterInfo]]] = None,
         max_history_length: int = 5,
-        sample_times: int = 10,
-        max_parallel_requests: int = 5,
+        sample_times: int = 6,
+        max_parallel_requests: int = 6,
     ):
         """初始化拒绝采样器
 
         Args:
             model_name: 使用的模型名称
             temperature: 生成温度，控制输出的随机性
-            requests_per_minute: 每分钟最大请求数（暂未使用）
             previous_results: 历史分簇结果，用于上下文注入
             max_history_length: 保留的历史记录最大长度
             sample_times: 每次拒绝采样的次数
@@ -130,7 +125,7 @@ class RejectionSampler:
             pydantic_object=SatelliteClusterOutput
         )
 
-        print(f"拒绝采样器初始化完成: {self.model_name}, 采样次数: {self.sample_times}")
+        print(f"拒绝采样器初始化完成: {self.model_name}, 每次拒绝采样的次数: {self.sample_times}")
 
     def _inject_historical_context(
         self, data: RawConstellationDataModel
@@ -345,7 +340,6 @@ class RejectionSampler:
 
                     if conversation_message is not None:
                         successful_conversations.append(conversation_message)
-                    # 失败情况已经在 _single_sample_request 中打印了，这里不需要额外处理
 
                 except Exception as e:
                     print(f"样本 {sample_index} 采样 {attempt_id} 异常: {str(e)}")
@@ -653,7 +647,6 @@ def main():
     distiller = RejectionSampler(
         model_name=model_name,
         temperature=0.6,
-        requests_per_minute=60,
         previous_results=None,  # 如果有历史结果，在这里传入
         max_history_length=5,
         sample_times=10,  # 拒绝采样次数
