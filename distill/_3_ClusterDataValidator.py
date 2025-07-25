@@ -757,6 +757,11 @@ class ClusterDataValidator:
         1. 致命错误检测：主节点不在簇内、簇内存在孤星 → 扣全部100分，标记ERROR错误
         2. 通信代价评估：分析簇内同步代价和全网同步代价 → 按代价比例扣分（最多100分）
 
+        通信代价计算说明：
+        - 星座总代价：sat_attrs中所有卫星建立两两通信的最短路径代价（单向，不重复计算）
+        - 路径规划：使用sat_edges提供的连接关系作为跳板进行最短路径计算
+        - 分簇代价：簇内同步代价 + 簇间主节点通信代价
+
         扣分机制：
         - 主节点无效或孤星存在：直接扣满分100分
         - 通信代价过高：按占总星座代价比例映射扣分
@@ -770,11 +775,11 @@ class ClusterDataValidator:
         # 构建卫星基础信息
         sat_positions = {}
         sat_distances = {}
-        all_satellites = set()
+        constellation_satellites = set()  # 从sat_attrs中获取的所有卫星
 
         for sat_attr in conversation.input.sat_attrs:
             sat_positions[sat_attr.id] = sat_attr.pos
-            all_satellites.add(sat_attr.id)
+            constellation_satellites.add(sat_attr.id)
 
         for edge in conversation.input.sat_edges:
             sat_distances[(edge.from_sat, edge.to_sat)] = edge.distance
@@ -893,7 +898,7 @@ class ClusterDataValidator:
         for i, master1 in enumerate(masters):
             for master2 in masters[i + 1 :]:
                 path_cost = self._find_shortest_path_cost(
-                    master1, master2, sat_distances, all_satellites
+                    master1, master2, sat_distances, constellation_satellites
                 )
 
                 if path_cost is not None:
@@ -902,13 +907,17 @@ class ClusterDataValidator:
 
         total_cost = total_intra_cluster_cost + total_inter_cluster_cost
 
-        # 计算星座总通信代价作为基准（所有可联通的卫星对之间的最短路径代价总和）
+        # 计算星座总通信代价作为基准（sat_attrs中所有卫星两两通信的代价，单向，使用sat_edges作为跳板）
+        constellation_satellites = set()
+        for sat_attr in conversation.input.sat_attrs:
+            constellation_satellites.add(sat_attr.id)
+        
         total_constellation_cost = 0
-        for i, sat1 in enumerate(all_satellites):
-            for sat2 in list(all_satellites)[i + 1 :]:
-                # 计算任意两颗卫星之间的最短路径代价
+        for i, sat1 in enumerate(constellation_satellites):
+            for sat2 in list(constellation_satellites)[i + 1 :]:
+                # 计算sat_attrs中任意两颗卫星之间的最短路径代价（使用整个sat_edges网络作为跳板）
                 path_cost = self._find_shortest_path_cost(
-                    sat1, sat2, sat_distances, all_satellites
+                    sat1, sat2, sat_distances, constellation_satellites
                 )
                 if path_cost is not None:
                     total_constellation_cost += path_cost
