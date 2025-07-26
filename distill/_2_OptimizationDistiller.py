@@ -5,7 +5,6 @@
 """
 
 # 标准库导入
-import datetime
 import json
 import os
 import re
@@ -138,9 +137,9 @@ class OptimizationDistiller:
                 input_instructions=input_instructions,
                 output_format_instructions=format_instructions,
             )
-            system_prompt = (
-                system_prompt.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-            )
+            # system_prompt = (
+            #     system_prompt.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+            # )
             system_prompt = re.sub(r"\s+", " ", system_prompt)
 
             # 构建消息
@@ -149,6 +148,8 @@ class OptimizationDistiller:
                 {"role": "user", "content": user_content.strip()},
             ]
 
+            print(messages)
+            exit()
             print(f"🔧 开始优化样本 {sample_index}")
 
             # 调用API

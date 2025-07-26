@@ -165,8 +165,8 @@ class ClusterOptimizationOutput(BaseModel):
     
     包含优化摘要和优化后的分簇结果
     """
-    chain_of_thought: Optional[str] = Field(
-        description="推理过程，大模型生成阶段不需要填写，后期封装"
+    chain_of_thought: str = Field(
+        description="推理过程"
     )
     is_optimized: bool = Field(..., description="是否进行了优化")
     changes_made: List[str] = Field(default=[], description="具体的优化调整描述列表")
