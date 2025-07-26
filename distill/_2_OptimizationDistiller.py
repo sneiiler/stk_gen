@@ -9,9 +9,12 @@ import json
 import os
 import re
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional
+from queue import Queue
+from typing import List, Optional, Tuple
 
 # 第三方库导入
 from dotenv import load_dotenv
@@ -48,6 +51,43 @@ if not api_key_openai or not api_base_openai:
     )
 
 
+class ThreadSafeWriter:
+    """线程安全的文件写入器"""
+
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+        self.lock = threading.Lock()
+        # 确保输出目录存在
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def write_line(self, data: str):
+        """线程安全地写入一行数据"""
+        with self.lock:
+            with open(self.file_path, "a", encoding="utf-8") as f:
+                f.write(data + "\n")
+                f.flush()
+
+
+class RateLimiter:
+    """简单的速率限制器"""
+
+    def __init__(self, requests_per_minute: int = 60):
+        self.requests_per_minute = requests_per_minute
+        self.min_interval = 60.0 / requests_per_minute
+        self.last_request_time = 0
+        self.lock = threading.Lock()
+
+    def wait_if_needed(self):
+        """如果需要的话等待以满足速率限制"""
+        with self.lock:
+            current_time = time.time()
+            time_since_last = current_time - self.last_request_time
+            if time_since_last < self.min_interval:
+                sleep_time = self.min_interval - time_since_last
+                time.sleep(sleep_time)
+            self.last_request_time = time.time()
+
+
 class OptimizationDistiller:
     """卫星分簇优化蒸馏器
 
@@ -55,17 +95,28 @@ class OptimizationDistiller:
     1. 加载验证结果数据
     2. 基于验证反馈进行分簇优化
     3. 生成ShareGPT格式的训练数据
+    4. 多线程并发处理提升效率
     """
 
-    def __init__(self, model_name: str, temperature: float):
+    def __init__(
+        self, 
+        model_name: str, 
+        temperature: float,
+        requests_per_minute: int = 60,
+        max_workers: int = 3
+    ):
         """初始化优化蒸馏器
 
         Args:
             model_name: 使用的模型名称
             temperature: 生成温度，控制输出的随机性（优化任务建议使用较低温度）
+            requests_per_minute: 每分钟最大请求数
+            max_workers: 最大并发线程数
         """
         self.model_name = model_name
         self.temperature = temperature
+        self.max_workers = max_workers
+        self.rate_limiter = RateLimiter(requests_per_minute)
 
         # 初始化OpenAI客户端和解析器
         self.client = OpenAI(api_key=api_key_openai, base_url=api_base_openai)
@@ -78,7 +129,10 @@ class OptimizationDistiller:
             template=get_cluster_optimization_prompt()
         )
 
-        print(f"优化蒸馏器初始化完成: {self.model_name}, 温度: {self.temperature}")
+        print(f"优化蒸馏器初始化完成:")
+        print(f"- 模型: {self.model_name}")
+        print(f"- 最大并发: {self.max_workers}")
+        print(f"- 请求频率: {requests_per_minute}/分钟")
 
     def _extract_reasoning_and_content(self, response_stream) -> tuple[str, str]:
         """从流式响应中提取思考过程和内容"""
@@ -118,6 +172,9 @@ class OptimizationDistiller:
             (思维链, 优化结果, 格式化系统提示) 的元组，如果优化失败则返回None
         """
         try:
+            # 应用速率限制
+            self.rate_limiter.wait_if_needed()
+            
             # 直接使用ValidationItem作为用户输入
             user_input = validation_item.model_dump_json()
 
@@ -147,9 +204,7 @@ class OptimizationDistiller:
                 {"role": "system", "content": system_prompt.strip()},
                 {"role": "user", "content": user_content.strip()},
             ]
-
-            print(messages)
-            exit()
+            
             print(f"🔧 开始优化样本 {sample_index}")
 
             # 调用API
@@ -231,10 +286,119 @@ class OptimizationDistiller:
             ]
         )
 
+    def process_single_item(
+        self,
+        item_data: Tuple[int, ValidationItem],
+        writer: ThreadSafeWriter,
+        stats_queue: Queue,
+    ) -> None:
+        """处理单个数据项（在线程中调用）"""
+        index, validation_item = item_data
+
+        try:
+            # 处理数据
+            result = self.optimize_single_validation_item(validation_item, index)
+
+            if result is None:
+                # 记录错误
+                error_data = {
+                    "error": "优化失败",
+                    "sample_index": index,
+                    "timestamp": get_current_timestamp(),
+                    "model": self.model_name,
+                }
+                writer.write_line(
+                    f"ERROR: {json.dumps(error_data, ensure_ascii=False)}"
+                )
+                stats_queue.put("failed")
+                return
+
+            optimization_result, formatted_system_prompt = result
+
+            # 创建ShareGPT格式数据
+            sharegpt_data = self.create_sharegpt_format(
+                validation_item,
+                optimization_result,
+                formatted_system_prompt,
+            )
+
+            # 写入成功结果
+            writer.write_line(sharegpt_data.model_dump_json())
+            stats_queue.put("success")
+
+        except Exception as e:
+            error_data = {
+                "error": f"处理异常: {str(e)}",
+                "sample_index": index,
+                "timestamp": get_current_timestamp(),
+                "model": self.model_name,
+            }
+            writer.write_line(f"ERROR: {json.dumps(error_data, ensure_ascii=False)}")
+            stats_queue.put("failed")
+
+    def process_validation_data_batch_multithread(
+        self, validation_data: List[ValidationItem], output_file: Path
+    ) -> Tuple[int, int]:
+        """多线程批量处理验证数据并实时保存。
+
+        Args:
+            validation_data: 验证数据列表
+            output_file: 输出文件路径
+            
+        Returns:
+            (成功数, 失败数)
+        """
+        # 初始化线程安全的写入器
+        writer = ThreadSafeWriter(output_file)
+
+        # 统计信息队列
+        stats_queue = Queue()
+
+        # 创建带索引的数据列表
+        indexed_data = list(enumerate(validation_data))
+
+        # 使用线程池处理
+        print(f"开始多线程处理，使用 {self.max_workers} 个线程")
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # 提交所有任务
+            future_to_index = {
+                executor.submit(
+                    self.process_single_item, item, writer, stats_queue
+                ): item[0]
+                for item in indexed_data
+            }
+
+            # 使用tqdm显示进度
+            with tqdm(total=len(validation_data), desc="优化进度") as pbar:
+                for future in as_completed(future_to_index):
+                    try:
+                        future.result()  # 获取结果，如果有异常会抛出
+                    except Exception as e:
+                        index = future_to_index[future]
+                        print(f"线程处理样本 {index} 时出现异常: {str(e)}")
+                    finally:
+                        pbar.update(1)
+
+        # 收集统计信息
+        stats = {"total": len(validation_data), "success": 0, "failed": 0}
+        while not stats_queue.empty():
+            result = stats_queue.get()
+            if result == "success":
+                stats["success"] += 1
+            elif result == "failed":
+                stats["failed"] += 1
+
+        # 打印统计信息
+        print(f"多线程处理完成统计: {stats}")
+        print(f"成功率: {stats['success'] / stats['total'] * 100:.2f}%")
+        
+        return stats["success"], stats["failed"]
+
     def process_validation_data_batch(
         self, validation_data: List[ValidationItem], output_file: Path
     ) -> tuple[int, int]:
-        """批量处理验证数据
+        """批量处理验证数据（兼容性方法，调用多线程版本）
 
         Args:
             validation_data: 验证数据列表
@@ -243,52 +407,7 @@ class OptimizationDistiller:
         Returns:
             (成功数, 失败数)
         """
-        success_count = 0
-        failed_count = 0
-
-        print(f"🚀 开始处理 {len(validation_data)} 个验证项")
-        print(f"📝 输出文件: {output_file}")
-
-        # 确保输出目录存在
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-
-        for index, validation_item in tqdm(
-            enumerate(validation_data), total=len(validation_data), desc="优化进度"
-        ):
-            try:
-                # 进行优化
-                result = self.optimize_single_validation_item(validation_item, index)
-
-                if result is not None:
-                    optimization_result, formatted_system_prompt = (
-                        result
-                    )
-
-                    # 创建ShareGPT格式数据
-                    sharegpt_data = self.create_sharegpt_format(
-                        validation_item,
-                        optimization_result,
-                        formatted_system_prompt,
-                    )
-
-                    # 保存到文件
-                    with open(output_file, "a", encoding="utf-8") as f:
-                        f.write(sharegpt_data.model_dump_json() + "\n")
-                        f.flush()
-
-                    success_count += 1
-                else:
-                    failed_count += 1
-
-            except Exception as e:
-                print(f"❌ 样本 {index} 处理异常: {str(e)}")
-                failed_count += 1
-
-        print(f"✅ 处理完成!")
-        print(f"📊 成功: {success_count}, 失败: {failed_count}")
-        print(f"📁 结果已保存到: {output_file}")
-
-        return success_count, failed_count
+        return self.process_validation_data_batch_multithread(validation_data, output_file)
 
 
 def main():
@@ -323,11 +442,14 @@ def main():
     if not validation_data:
         print("❌ 没有有效的验证数据")
         return
-    validation_data = validation_data[:1]
+    validation_data = validation_data[:5]
 
     # 初始化优化蒸馏器
     distiller = OptimizationDistiller(
-        model_name="qwen3-235b-a22b-thinking-2507", temperature=0.3  # 可以根据需要修改
+        model_name="qwen3-235b-a22b-thinking-2507",  # 可以根据需要修改
+        temperature=0.3,
+        requests_per_minute=60,  # 根据API限制调整
+        max_workers=3,  # 建议从3开始，成功后可以增加到5-6
     )
 
     # 生成输出文件路径
@@ -351,6 +473,14 @@ def main():
         f"📊 平均每个样本耗时: {(end_time - start_time) / len(validation_data):.2f} 秒"
     )
     print(f"📈 成功率: {success_count / len(validation_data) * 100:.1f}%")
+    
+    # 提供优化建议
+    print(f"\n💡 优化建议:")
+    print(f"1. 如果成功率较高，可以将 max_workers 增加到 5-6")
+    print(f"2. 如果遇到429错误，降低 requests_per_minute 或 max_workers")
+    print(f"3. 如果需要更高质量的优化，可以降低 temperature")
+    print(f"4. 当前使用模型: {distiller.model_name}")
+    print(f"5. 结果已保存到: {output_file}")
 
 
 if __name__ == "__main__":
