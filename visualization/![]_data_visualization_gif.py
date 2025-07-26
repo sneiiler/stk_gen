@@ -11,7 +11,8 @@ from PIL import Image
 from matplotlib.font_manager import FontProperties
 from tqdm import tqdm
 
-from data_classes.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput
+from data_classes.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput, \
+    LLMConversationMessage
 
 # 设置matplotlib支持中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']
@@ -186,12 +187,12 @@ def create_global_cluster_colors(clustor_data) -> dict:
     return continuity_analysis['stable_cluster_colors']
 
 
-def analyze_cluster_continuity(clustor_data) -> dict:
+def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dict:
     """
     分析分簇的连续性，基于目标重叠度进行分簇跟踪和重新编号
     
     Args:
-        clustor_data: 分簇数据对象
+        cluster_data: 分簇数据对象
         
     Returns:
         dict: 包含稳定分簇映射的字典，结构为：
@@ -203,7 +204,7 @@ def analyze_cluster_continuity(clustor_data) -> dict:
     """
     # 提取所有时间切片的分簇数据
     time_cluster_data = []
-    for clustor in clustor_data.output_result_data:
+    for clustor in cluster_data.output_result_data:
         timestamp_clusters = {}
         for cluster_item in clustor:
             timestamp = cluster_item.get('timestamp')
@@ -920,7 +921,7 @@ if __name__ == "__main__":
         exit("数据文件不存在，使用模拟数据...")
 
     time_slices = load_raw_data(data_file)
-    clustor_data = load_sharegpt_data(get_data_dir() / "clustering_results_cmax_20001.jsonl")
+    cluster_data = load_sharegpt_data(get_data_dir() / "clustering_results_cmax_20001.jsonl")
     # time_slices = time_slices[1:19]
 
     print(f"成功加载 {len(time_slices)} 个时间切片")
@@ -973,7 +974,7 @@ if __name__ == "__main__":
 
         # 进行全局分簇连续性分析
         print("\n进行分簇连续性分析...")
-        continuity_analysis = analyze_cluster_continuity(clustor_data)
+        continuity_analysis = analyze_cluster_continuity(cluster_data)
         
         # 创建全局目标颜色映射，确保所有时间切片中同一目标使用相同颜色
         global_target_colors = create_global_target_colors(time_slices)
@@ -991,7 +992,7 @@ if __name__ == "__main__":
             visualize_fig_save_path = visualize_dir / f"satellite_target_map_with_clusters_{index:03d}.png"
             # visualize_fig_save_path = None  # 取消注释这行来直接显示而不保存
             visualize_satellites_and_targets_on_map(time_slices,
-                                                    clustor_data,  # 直接传递ValidationInput对象
+                                                    cluster_data,  # 直接传递ValidationInput对象
                                                     time_slice_index=index,
                                                     save_path=visualize_fig_save_path,
                                                     global_target_colors=global_target_colors,
