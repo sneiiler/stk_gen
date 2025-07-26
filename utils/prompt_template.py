@@ -650,7 +650,7 @@ def get_version_info():
 
 # 卫星分簇优化专用Prompt（精简版）
 CLUSTER_OPTIMIZATION_PROMPT_COMPACT = """
-你是卫星动态观测分簇任务优化专家。基于规则分簇结果和验证反馈进行**精细化优化**注意：你的任务是优化现有结果，而不是重新生成全新的分簇方案。
+你是卫星动态观测分簇任务优化专家。基于规则分簇结果和验证反馈进行**精细化优化**注意：你的任务是优化现有结果，而不是重新生成全新的分簇方案，如果没有优化的空间可以不进行优化。
 
 ## 核心任务
 **在保持历史稳定性和现有分簇结构基础上，最小化调整，最大化四维验证评分，保持历史稳定性**
@@ -681,13 +681,17 @@ CLUSTER_OPTIMIZATION_PROMPT_COMPACT = """
 - ✅ 主节点属于其簇且连通
 - ✅ 保持历史连续性
 
-## 输入数据格式
-{input_instructions}
+## 输入数据格式概要：
+ValidationItem: input (原始输入数据), response (模型分簇结果), validation_details (各项验证详情)
+ClusterInfo: timestamp (时间戳), cluster_id (分簇ID), master (主节点), sats (簇内卫星列表), targets (簇观测目标列表)
+RawConstellationDataModel: timestamp (时间戳), sat_attrs (卫星属性列表), sat_edges (卫星间连接关系), target_edges (卫星到目标观测关系), history_cluster_result (历史分簇结果)
+SatelliteAttributes: id (卫星ID), health (健康状态), pos (位置坐标)
+SatelliteEdge: from_sat (起始卫星ID), to_sat (目标卫星ID), distance (距离)
+TargetEdge: sat_id (观测卫星ID), target_id (目标ID), quality (连接质量)
+ValidationDetail: validation_type (验证类型), score (分项得分), info (详细信息/警告)
 
-## 输出格式
+## IMPORTANT:
 {output_format_instructions}
-
-**开始基于validation_details的精细化优化！**
 """
 
 
