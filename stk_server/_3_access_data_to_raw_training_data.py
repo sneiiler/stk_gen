@@ -1,11 +1,12 @@
 import json
 import math
+import sys
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Any
-import numpy as np
-import sys
 from pathlib import Path
+from typing import Dict, List, Any
+
+import numpy as np
 
 root_dir = Path(__file__).parent.parent
 sys.path.append(str(root_dir))
@@ -191,23 +192,23 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
         for entry in entries:
             # 处理卫星间连接
             for conn in entry["inter_satellite_connectivity"]:
-                from_id = int(entry["satellite_info"]["id"].replace("Satellite", ""))
-                to_id = int(conn["to_satellite_id"].replace("Satellite", ""))
+                from_id = entry["satellite_info"]["id"]
+                to_id = conn["to_satellite_id"]
                 conn_key = (from_id, to_id)
 
                 if conn_key not in processed_connections:
                     sat_edges.append(SatelliteEdge(
                         from_sat=from_id,
                         to_sat=to_id,
-                        distance=round(sat_distances[sat_distance_idx],2)
+                        distance=round(sat_distances[sat_distance_idx], 2)
                     ))
                     sat_distance_idx += 1
                     processed_connections.add(conn_key)
 
             # 处理目标可见性
             for target in entry["target_visibility"]:
-                from_id = int(entry["satellite_info"]["id"].replace("Satellite", ""))
-                to_id = int(target["target_id"].replace("m", "").replace("n", ""))
+                from_id = entry["satellite_info"]["id"]
+                to_id = target["target_id"]
                 target_key = (from_id, to_id)
 
                 if target_key not in processed_targets:
@@ -236,7 +237,10 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
 
 def main():
     # 读取输入文件
-    with open(get_data_dir() / "satellite_target_visibility_data_scenario_3_20250722_204803.json", "r") as f:
+    scenario_index = 3
+    with open(
+            get_data_dir() / f"stk_access_result_data/satellite_target_visibility_data_scenario_{scenario_index}_20250722_204803.json",
+            "r") as f:
         input_data = json.load(f)
 
     # 转换数据
@@ -244,12 +248,12 @@ def main():
 
     # 获取当前时间戳
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = get_data_dir() / f"training_data_raw_scenario_3_{timestamp}.jsonl"
+    output_file = get_data_dir() / f"stk_access_result_data/raw_constellation_data_scenario_{scenario_index}_{timestamp}.jsonl"
 
     # 写入输出文件
     with open(output_file, "w", encoding="utf-8") as f:
         for result in converted_data:
-            f.write(result.model_dump_json()+ "\n")
+            f.write(result.model_dump_json() + "\n")
     print(f"转换完成! 结果已保存到: {output_file}")
 
 

@@ -13,18 +13,15 @@ from typing import List, Optional
 root_dir = Path(__file__).parent.parent
 sys.path.append(str(root_dir))
 
-from datetime import datetime
-from collections import defaultdict
 from icecream import install
 
 install()
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
-from utils.misc_utils import get_data_dir, get_project_root
+from utils.misc_utils import get_data_dir, get_project_root, get_current_timestamp
 from misc_tools.sharegpt_utils import load_sharegpt_data
 from data_classes.sft_data_models import LLMConversationMessage
-
 
 from data_classes.data_validation_models import ValidationItem
 
@@ -86,29 +83,14 @@ class ClusterDataValidator:
 
         try:
             # 1. 目标覆盖验证，含：不存在的目标，目标覆盖情况
-            self._validate_target_coverage(self.input_data, validation_result)
-
-            # 2. 验证卫星分配情况，含：同一卫星分配到多个簇，不存在的卫星，卫星使用率
-            self._validate_satellite_assignment(self.input_data, validation_result)
-
-            # 3. 最小分簇验证
-            self._validate_minimize_clusters(self.input_data, validation_result)
-
-            # # 5. 分簇验证
-            # self._validate_cluster_qulitys(self.input_data, validation_result)
-
-            # # 6. 链路质量验证
-            # self._validate_link_quality(output, self., validation_result)
-
-            # # 7. 观测质量验证
-            # self._validate_observation_quality(output, input_data, validation_result)
+            self._correctness_validation(self.input_data, validation_result)
 
         except Exception as e:
             print(f"验证过程发生异常: {e}")
 
         return validation_result
 
-    def _validate_target_coverage(
+    def _correctness_validation(
             self,
             input_data: List[LLMConversationMessage],
             result: List[ValidationItem],
@@ -116,6 +98,8 @@ class ClusterDataValidator:
         """验证卫星分配
 
         Args:
+            input_data:
+            result:
         """
 
         for index, conversation in tqdm(enumerate(input_data)):
@@ -128,158 +112,18 @@ class ClusterDataValidator:
             output_targets = set()
             for cluster in conversation.response.clusters:
                 output_targets.update(cluster.targets)
-
-            # 检查目标覆盖是否完整
-            missing_targets = input_targets - output_targets
-            extra_targets = output_targets - input_targets
-
             # 计算覆盖率
             if input_targets:
                 coverage_rate = round(len(output_targets & input_targets) / len(input_targets), 2)
             else:
                 coverage_rate = 1.0  # 如果没有输入目标，认为覆盖率为100%
 
-            # 计算分数影响
-            score_penalty = 0
-            errors = []
-            warnings = []
-
-            if missing_targets:
-                errors.append(f"目标覆盖不完整：缺少目标 {missing_targets}")
-                score_penalty += 0.3
-
-            if extra_targets:
-                errors.append(f"目标覆盖错误：包含不存在的目标 {extra_targets}")
-                score_penalty += 0.2
-
             # 创建验证详情
             from data_classes.data_validation_models import ValidationDetail
             result[index].validation_details.append(ValidationDetail(
-                validation_type="target_coverage",
-                score=[str(-score_penalty)] if score_penalty > 0 else ["0"],
-                info=[f"覆盖率: {coverage_rate:.1%}"] + errors + warnings
-            ))
-
-    def _validate_satellite_assignment(
-            self,
-            input_data: List[LLMConversationMessage],
-            result: List[ValidationItem],
-    ) -> None:
-        """验证卫星分配
-
-        Args:
-            input_data: 输入数据列表
-            result: 验证结果对象
-        """
-
-        for index, conversation in tqdm(enumerate(input_data)):
-            # 提取输入中的所有卫星
-            input_satellites = set()
-            for attr in conversation.input.sat_attrs:
-                input_satellites.add(attr.id)
-
-            # 统计卫星分配情况
-            satellite_assignments = defaultdict(list)
-            all_output_sats = []
-
-            for cluster_idx, cluster in enumerate(conversation.response.clusters):
-                cluster_sats = cluster.sats
-                all_output_sats.extend(cluster_sats)
-
-                for sat in cluster_sats:
-                    satellite_assignments[sat].append(cluster_idx)
-
-            output_satellites = set(all_output_sats)
-
-            # 检查重复分配
-            duplicate_assignments = {
-                sat: clusters
-                for sat, clusters in satellite_assignments.items()
-                if len(clusters) > 1
-            }
-
-            # 检查不存在的卫星
-            invalid_satellites = output_satellites - input_satellites
-
-            # 检查未使用的卫星
-            unused_satellites = input_satellites - output_satellites
-
-            # 计算分数影响
-            score_penalty = 0
-            errors = []
-            warnings = []
-
-            if duplicate_assignments:
-                for sat, clusters in duplicate_assignments.items():
-                    warnings.append(f"卫星 {sat} 被分配到多个簇: {clusters}")
-                score_penalty += 0.1
-
-            if invalid_satellites:
-                errors.append(f"包含不存在的卫星: {sorted(invalid_satellites)}")
-                score_penalty += 0.4
-
-            if unused_satellites:
-                warnings.append(f"未使用的卫星: {sorted(unused_satellites)}")
-
-            # 创建验证详情
-            from data_classes.data_validation_models import ValidationDetail
-            utilization_rate = len(output_satellites) / len(input_satellites) if input_satellites else 0
-            result[index].validation_details.append(ValidationDetail(
-                validation_type="satellite_assignment",
-                score=[str(-score_penalty)] if score_penalty > 0 else ["0"],
-                info=[f"卫星使用率: {utilization_rate:.1%}"] + errors + warnings
-            ))
-
-    def _validate_minimize_clusters(
-            self,
-            input_data: List[LLMConversationMessage],
-            result: List[ValidationItem],
-    ) -> None:
-        """验证最小分簇原则
-        Args:
-        """
-        for index, conversation in tqdm(enumerate(input_data)):
-            # 检查分簇数量是否合理
-            cluster_count = len(conversation.response.clusters)
-
-            warnings = []
-            errors = []
-            score_penalty = 0
-
-            # 检查分簇数量是否合理
-            if cluster_count < 2:
-                warnings.append(f"分簇数量过少: {cluster_count}")
-                score_penalty += 0.1
-            elif cluster_count > 10:
-                warnings.append(f"分簇数量过多: {cluster_count}")
-                score_penalty += 0.1
-
-            # 检查是否有空簇
-            empty_clusters = []
-            for cluster_idx, cluster in enumerate(conversation.response.clusters):
-                if not cluster.sats and not cluster.targets:
-                    empty_clusters.append(cluster_idx)
-
-            if empty_clusters:
-                errors.append(f"存在空簇: {empty_clusters}")
-                score_penalty += 0.3
-
-            # 检查单卫星簇（可能需要合并）
-            single_sat_clusters = []
-            for cluster_idx, cluster in enumerate(conversation.response.clusters):
-                if len(cluster.sats) == 1:
-                    single_sat_clusters.append(cluster_idx)
-
-            if len(single_sat_clusters) > cluster_count * 0.3:  # 如果超过30%的簇只有一个卫星
-                warnings.append(f"单卫星簇过多: {len(single_sat_clusters)}/{cluster_count}")
-                score_penalty += 0.05
-
-            # 创建验证详情
-            from data_classes.data_validation_models import ValidationDetail
-            result[index].validation_details.append(ValidationDetail(
-                validation_type="minimize_clusters",
-                score=[str(-score_penalty)] if score_penalty > 0 else ["0"],
-                info=[f"分簇数量: {cluster_count}"] + errors + warnings
+                validation_type="correctness_validation",
+                score=0,
+                info=f"覆盖率: {coverage_rate:.1%}"
             ))
 
 
@@ -297,30 +141,28 @@ def plot_coverage(results: List[ValidationItem], save_path: Optional[str] = None
     coverage_rates = []
 
     for res in results:
-        # 从validation_details中找到target_coverage数据
+        # 从validation_details中找到correctness_validation数据
         coverage_detail = None
         for detail in res.validation_details:
-            if detail.validation_type == "target_coverage":
+            if detail.validation_type == "correctness_validation":
                 coverage_detail = detail
-                break
+                # break
 
         if coverage_detail:
             # 从info中解析覆盖率信息
-            for info_item in coverage_detail.info:
-                if "覆盖率:" in info_item:
-                    try:
-                        # 解析覆盖率，例如 "覆盖率: 85.0%"
-                        coverage_str = info_item.split("覆盖率:")[1].strip().rstrip('%')
-                        coverage_rate = float(coverage_str) / 100
+            if "覆盖率:" in coverage_detail.info:
+                try:
+                    # 解析覆盖率，例如 "覆盖率: 85.0%"
+                    coverage_str = coverage_detail.info.split("覆盖率:")[1].strip().rstrip('%')
+                    coverage_rate = float(coverage_str) / 100
 
-                        # 估算输入目标数量（这里简化处理）
-                        input_num = len(res.input.target_edges) if hasattr(res.input, 'target_edges') else 10
+                    # 估算输入目标数量（这里简化处理）
+                    input_num = len(res.input.target_edges) if hasattr(res.input, 'target_edges') else 10
 
-                        input_nums.append(input_num)
-                        coverage_rates.append(coverage_rate)
-                        break
-                    except (ValueError, IndexError):
-                        continue
+                    input_nums.append(input_num)
+                    coverage_rates.append(coverage_rate)
+                except (ValueError, IndexError):
+                    continue
 
     if not input_nums:
         print("没有有效数据可绘制")
@@ -404,6 +246,8 @@ def plot_coverage(results: List[ValidationItem], save_path: Optional[str] = None
     # 保存或显示
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.show()
+
         print(f"图表已保存至: {save_path}")
     else:
         plt.tight_layout()
@@ -413,11 +257,12 @@ def plot_coverage(results: List[ValidationItem], save_path: Optional[str] = None
 
 
 def main():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = get_current_timestamp()
 
     data_path = (
-            get_data_dir() / "clustering_results_cmax_200011.jsonl.jsonl"
+            get_data_dir() / "cluster_results_sharegpt_training_data/clustering_results_cmax_2000111.jsonl"
     )
+    out_path = get_data_dir() / f"cluster_results_sharegpt_training_data/{data_path.stem}_coverage_{timestamp}.png"
     # data_path = (
     #     get_data_dir() / "training_data_sharegpt_qwen3_235B_A22B_20250626_113625_30_v2.jsonl"
     # )
@@ -435,7 +280,7 @@ def main():
     validator = ClusterDataValidator(file_path=data_path)
     data = validator.validate_output()
 
-    plot_coverage(data, save_path=str(get_data_dir() / f"coverage_{timestamp}_{str(data_path)[-5:-4]}.png"),
+    plot_coverage(data, save_path=str(out_path),
                   image_title=image_title)
     print(len(data))
 

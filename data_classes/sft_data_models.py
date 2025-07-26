@@ -26,8 +26,8 @@ class SatelliteEdge(BaseModel):
         distance: 卫星距离，单位km
     """
 
-    from_sat: str | int = Field(..., description="起始卫星ID")
-    to_sat: str | int = Field(..., description="目标卫星ID")
+    from_sat: str = Field(..., description="起始卫星ID")
+    to_sat: str = Field(..., description="目标卫星ID")
     distance: float = Field(..., description="卫星距离，单位km")
 
 
@@ -40,8 +40,8 @@ class TargetEdge(BaseModel):
         quality: 连接质量 (0-1)
     """
 
-    sat_id: str | int = Field(..., description="起始卫星ID")
-    target_id: str | int = Field(..., description="目标ID")
+    sat_id: str = Field(..., description="起始卫星ID")
+    target_id: str = Field(..., description="目标ID")
     quality: float = Field(..., description="连接质量 (0-1)")
 
 
@@ -49,10 +49,10 @@ class ClusterInfo(BaseModel):
     """分簇信息模型"""
 
     timestamp: Optional[str] = Field(..., description="ISO8601格式的时间戳字符串")
-    cluster_id: str | int = Field(description="分簇ID")
-    master: str | int = Field(description="主节点卫星ID")
-    sats: List[str | int] = Field(description="分簇中的卫星ID列表")
-    targets: List[str | int] = Field(description="分簇观测的目标ID列表")
+    cluster_id: int = Field(description="分簇ID")
+    master: str = Field(description="主节点卫星ID")
+    sats: List[str] = Field(description="分簇中的卫星ID列表")
+    targets: List[str] = Field(description="分簇观测的目标ID列表")
 
 
 class RawConstellationDataModel(BaseModel):
@@ -158,3 +158,29 @@ class LLMConversationMessage(BaseModel):
             ]
         }
         return json.dumps(sharegpt_data, ensure_ascii=False, separators=(",", ":"))
+
+
+class ClusterOptimizationOutput(BaseModel):
+    """卫星分簇优化输出模型
+    
+    包含优化摘要和优化后的分簇结果
+    """
+    chain_of_thought: Optional[str] = Field(
+        description="推理过程，大模型生成阶段不需要填写，后期封装"
+    )
+    is_optimized: bool = Field(..., description="是否进行了优化")
+    changes_made: List[str] = Field(default=[], description="具体的优化调整描述列表")
+    clusters: List[ClusterInfo] = Field(..., description="优化后的卫星分簇列表")
+
+    def to_think_json(self):
+        thought_content = self.chain_of_thought or ""
+        return (
+            "<think>"
+            + thought_content
+            + "</think>"
+            + json.dumps(
+                [cluster.model_dump() for cluster in self.clusters],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )

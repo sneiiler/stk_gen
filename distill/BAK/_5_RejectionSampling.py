@@ -38,10 +38,12 @@ from data_classes.sft_data_models import (
     ShareGPTFormat,
     ShareGPTMessage,
     LLMConversationMessage,
+    ClusterOptimizationResult,
+    ClusterOptimizationResult,
 )
 from data_classes.data_validation_models import ValidationItem
 from utils.misc_utils import get_data_dir, get_project_root
-from utils.prompt_template import get_prompt_template
+from utils.prompt_template import get_prompt_template, CLUSTER_OPTIMIZATION_PROMPT_COMPACT
 
 env_path = get_project_root() / ".env"
 load_dotenv(env_path)
@@ -624,6 +626,159 @@ class RejectionSampler:
                 print(f"保存结果失败 (样本 {index}): {str(e)}")
                 stats_queue.put("failed")
 
+    def optimize_clusters_with_validation(
+        self,
+        validation_item: ValidationItem,
+        sample_index: int = 0
+    ) -> Optional[ClusterOptimizationResult]:
+        """基于验证反馈优化分簇结果
+        
+        Args:
+            validation_item: 包含输入数据、当前分簇结果和验证反馈的ValidationItem
+            sample_index: 样本索引，用于错误追踪
+            
+        Returns:
+            优化后的分簇结果，如果优化失败则返回None
+        """
+        try:
+            # 构建优化专用的输出解析器
+            optimization_parser = PydanticOutputParser(pydantic_object=ClusterOptimizationResult)
+            
+            # 构建优化输入数据
+            optimization_input = {
+                "timestamp": validation_item.input.timestamp,
+                "current_clusters": [cluster.model_dump() for cluster in validation_item.response],
+                "validation_details": {
+                    detail.validation_type: {
+                        "score": detail.score,
+                        "info": detail.info
+                    }
+                    for detail in validation_item.validation_details
+                },
+                "sat_attrs": [attr.model_dump() for attr in validation_item.input.sat_attrs],
+                "sat_edges": [edge.model_dump() for edge in validation_item.input.sat_edges],
+                "target_edges": [edge.model_dump() for edge in validation_item.input.target_edges],
+                "history_cluster_result": (
+                    [cluster.model_dump() for cluster in validation_item.input.history_cluster_result[-1]]
+                    if validation_item.input.history_cluster_result 
+                    else None
+                )
+            }
+            
+            # 准备用户输入
+            user_input = json.dumps(optimization_input, ensure_ascii=False)
+            
+            # 构建消息
+            messages = [
+                {"role": "system", "content": CLUSTER_OPTIMIZATION_PROMPT_COMPACT},
+                {"role": "user", "content": user_input}
+            ]
+            
+            print(f"🔧 开始优化样本 {sample_index} - 基于验证反馈进行精细化调整")
+            
+            # 调用API
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,  # type: ignore
+                stream=True,
+                temperature=self.temperature,
+            )
+            
+            # 提取思考过程和内容
+            reasoning_content, content = self._extract_reasoning_and_content(response)
+            
+            if not content.strip():
+                print(f"❌ 样本 {sample_index} 优化失败: API返回内容为空")
+                return None
+                
+            # 解析优化结果
+            try:
+                optimization_result = optimization_parser.parse(content)
+                
+                # 确保时间戳一致
+                original_timestamp = validation_item.input.timestamp
+                for cluster in optimization_result.clusters:
+                    if not cluster.timestamp:
+                        cluster.timestamp = original_timestamp
+                
+                print(f"✅ 样本 {sample_index} 优化成功")
+                return optimization_result
+                
+            except Exception as e:
+                print(f"❌ 样本 {sample_index} 优化失败 - 解析输出失败: {str(e)}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ 样本 {sample_index} 优化失败 - API调用失败: {str(e)}")
+            return None
+    
+    def batch_optimize_with_validation(
+        self,
+        validation_items: List[ValidationItem],
+        output_file: str,
+        max_workers: int = 3
+    ) -> Tuple[int, int]:
+        """批量优化分簇结果
+        
+        Args:
+            validation_items: 验证项列表，每项包含输入数据、当前分簇结果和验证反馈
+            output_file: 输出文件路径
+            max_workers: 最大并行工作线程数
+            
+        Returns:
+            (成功数, 失败数)
+        """
+        success_count = 0
+        failed_count = 0
+        
+        print(f"🚀 开始批量优化 {len(validation_items)} 个分簇结果")
+        print(f"📝 输出文件: {output_file}")
+        
+        # 创建线程安全的写入器
+        writer = ThreadSafeWriter(Path(output_file))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有优化任务
+            future_to_index = {
+                executor.submit(self.optimize_clusters_with_validation, validation_item, i): i
+                for i, validation_item in enumerate(validation_items)
+            }
+            
+            # 使用tqdm显示进度
+            with tqdm(total=len(validation_items), desc="优化进度") as pbar:
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    
+                    try:
+                        result = future.result()
+                        
+                        if result is not None:
+                            # 保存优化结果
+                            optimization_data = {
+                                "index": index,
+                                "input": validation_items[index].model_dump(),
+                                "output": result.model_dump(),
+                                "timestamp": validation_items[index].input.timestamp
+                            }
+                            
+                            writer.write_line(json.dumps(optimization_data, ensure_ascii=False))
+                            success_count += 1
+                            
+                        else:
+                            failed_count += 1
+                            
+                    except Exception as e:
+                        print(f"❌ 样本 {index} 处理异常: {str(e)}")
+                        failed_count += 1
+                    
+                    pbar.update(1)
+        
+        print(f"✅ 批量优化完成!")
+        print(f"📊 成功: {success_count}, 失败: {failed_count}")
+        print(f"📁 优化结果已保存到: {output_file}")
+        
+        return success_count, failed_count
+
 
 def main():
     """拒绝采样系统的主函数示例
@@ -635,7 +790,7 @@ def main():
     4. 保存ShareGPT格式的训练数据和正负样本分析文件
     """
     # 从JSON文件加载数据
-    input_file = get_data_dir() / "training_data_raw_scenario_3_20250723_104802.json"
+    input_file = get_data_dir() / "raw_constellation_data_scenario_3.json"
     with open(input_file, "r", encoding="utf-8") as f:
         batch_data = json.load(f)
 
