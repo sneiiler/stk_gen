@@ -18,7 +18,7 @@ sys.path.append(str(root_dir))
 from utils.misc_utils import get_current_timestamp, get_data_dir
 
 
-def add_history_to_clustering_data(input_file: str, output_file: Optional[str] = None):
+def add_history_to_clustering_data(input_file: Path | str, output_file:  Path | str):
     """
     为分簇数据添加历史分簇结果
     
@@ -188,19 +188,10 @@ def print_sample_data(file_path: str, sample_count: int = 3):
 
 
 if __name__ == "__main__":
-    # 处理命令行参数
-    if len(sys.argv) < 2:
-        print("用法: python add_history_to_clustering_data.py <input_file> [output_file]")
-        print("示例: python add_history_to_clustering_data.py clustering_results_cmax_200011.jsonl")
-        sys.exit(1)
-    
-    input_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else None
-    
+   
+    input_file = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_3.jsonl"
+    output_file = get_data_dir() / f"cluster_results_sharegpt_training_data/{input_file.stem}_with_history.jsonl"
+
     # 处理数据
     result_file = add_history_to_clustering_data(input_file, output_file)
     
-    # 显示样本数据
-    if result_file:
-        relative_path = Path(result_file).name
-        print_sample_data(relative_path, sample_count=3)

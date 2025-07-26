@@ -17,7 +17,7 @@ from data_classes.visibility_data_models import (
     SatelliteInfo,
     TargetVisibility,
     InterSatelliteConnectivity,
-    SatelliteVisibilityData
+    SatelliteVisibilityData,
 )
 from stk_server.Packages import STKConnector, Tools
 from utils.misc_utils import get_current_timestamp, get_data_dir
@@ -26,7 +26,10 @@ install()
 stk_conn = STKConnector.STKConnector()
 
 
-def visualize_satellites_mutual_access(access_data: Dict[str, Dict[str, List[Tuple[str, str, float]]]], output_file: str | Path):
+def visualize_satellites_mutual_access(
+    access_data: Dict[str, Dict[str, List[Tuple[str, str, float]]]],
+    output_file: str | Path,
+):
     """
     将卫星之间的可见性时长数据可视化为热力图。
 
@@ -99,7 +102,8 @@ def visualize_satellites_mutual_access(access_data: Dict[str, Dict[str, List[Tup
 
 
 def visualize_satellites_to_targets_access(
-        access_data: Dict[str, Dict[str, List[Tuple[str, str, float]]]], output_file: str | Path
+    access_data: Dict[str, Dict[str, List[Tuple[str, str, float]]]],
+    output_file: str | Path,
 ):
     """
     可视化卫星对目标的可见性持续时间数据
@@ -123,7 +127,7 @@ def visualize_satellites_to_targets_access(
             if sat in access_data and tgt in access_data[sat]:
                 # 计算总可见时间（分钟）
                 total_duration = (
-                        sum(duration for _, _, duration in access_data[sat][tgt]) / 60
+                    sum(duration for _, _, duration in access_data[sat][tgt]) / 60
                 )
                 row.append(total_duration)
             else:
@@ -177,13 +181,14 @@ def visualize_satellites_to_targets_access(
     else:
         plt.show()
 
+
 def gaussian_sample_health() -> float:
     """使用高斯分布生成卫星健康状态。
-    
+
     使用均值为0.8的高斯分布生成健康状态，并将结果限制在0-1范围内。
     标准差设置为0.2，这样大约95%的值会落在0.4-1.2的范围内。
     结果保留两位小数。
-    
+
     Returns:
         float: 0到1之间的健康状态值，保留两位小数
     """
@@ -191,6 +196,7 @@ def gaussian_sample_health() -> float:
     value = np.random.normal(0.8, 0.2)
     # 将值限制在0-1范围内并保留两位小数
     return round(max(0.0, min(1.0, value)), 2)
+
 
 def generate_satellite_target_visibility_data(
     satellites_to_targets_access: Dict[str, Dict[str, List[Tuple[str, str, float]]]],
@@ -245,7 +251,10 @@ def generate_satellite_target_visibility_data(
 
             for start_time, end_time, duration in intervals:
                 # 将时间转换为相对于场景开始时间的偏移量（秒）
-                t0 = Tools.get_ms_timestamp_by_date_string(start_time) - scenario_begin_ts
+                t0 = (
+                    Tools.get_ms_timestamp_by_date_string(start_time)
+                    - scenario_begin_ts
+                )
                 t1 = Tools.get_ms_timestamp_by_date_string(end_time) - scenario_begin_ts
                 if t0 < 0 or t1 < 0:
                     continue
@@ -268,7 +277,10 @@ def generate_satellite_target_visibility_data(
 
             for start_time, end_time, duration in intervals:
                 # 将时间转换为相对于场景开始时间的偏移量（秒）
-                t0 = Tools.get_ms_timestamp_by_date_string(start_time) - scenario_begin_ts
+                t0 = (
+                    Tools.get_ms_timestamp_by_date_string(start_time)
+                    - scenario_begin_ts
+                )
                 t1 = Tools.get_ms_timestamp_by_date_string(end_time) - scenario_begin_ts
                 if t0 < 0 or t1 < 0:
                     continue
@@ -309,11 +321,11 @@ def generate_satellite_target_visibility_data(
         backup_file = str(output_file).replace(".json", "_backup.json")
 
     processed_count = 0
-    for sat_id in tqdm(sorted(all_sats),desc="Processing satellites"):
+    for sat_id in tqdm(sorted(all_sats), desc="Processing satellites"):
         if sat_id not in visibility_dict:
             continue
 
-        for t_offset in tqdm(sample_time_points,desc="Processing time offsets"):
+        for t_offset in tqdm(sample_time_points, desc="Processing time offsets"):
             # 统计此刻可见的所有目标
             target_visibility = []
             for tgt_id, intervals in visibility_dict[sat_id].items():
@@ -333,7 +345,9 @@ def generate_satellite_target_visibility_data(
 
                         # 确保位置数据是有效的浮点数列表
                         if tgt_ecef and all(x is not None for x in tgt_ecef):
-                            position = [float(x) for x in tgt_ecef if x is not None]  # 确保类型为float
+                            position = [
+                                float(x) for x in tgt_ecef if x is not None
+                            ]  # 确保类型为float
                         else:
                             position = [0.0, 0.0, 0.0]  # 默认位置
 
@@ -413,8 +427,12 @@ def generate_satellite_target_visibility_data(
                             )
 
                             # 确保卫星位置数据是有效的浮点数列表
-                            if other_sat_ecef and all(x is not None for x in other_sat_ecef):
-                                sat_position = [float(x) for x in other_sat_ecef if x is not None]
+                            if other_sat_ecef and all(
+                                x is not None for x in other_sat_ecef
+                            ):
+                                sat_position = [
+                                    float(x) for x in other_sat_ecef if x is not None
+                                ]
                             else:
                                 sat_position = [0.0, 0.0, 0.0]  # 默认位置
 
@@ -477,13 +495,15 @@ def generate_satellite_target_visibility_data(
         print(f"最终结果已保存到: {output_file}")
     return result
 
+
 if __name__ == "__main__":
 
-    # 读取并转为 MissileInfo 对象
+    # 读取路线图并转为 MissileInfo 对象
+    scenario_index=3
     with open(
-            get_data_dir() / "missile_route_info_scenario_3.json",
-            "r",
-            encoding="utf-8",
+        get_data_dir() / f"stk_route_data/missile_route_info_scenario_{scenario_index}.json",
+        "r",
+        encoding="utf-8",
     ) as f:
         missile_data_loaded = json.load(f)
     missile_list = [MissileInfo(**item) for item in missile_data_loaded]
@@ -497,15 +517,24 @@ if __name__ == "__main__":
 
     # 生成带时间戳的文件名
     timestamp = get_current_timestamp()
-    png_filename = get_data_dir() / f"stk_satellites_mutual_access_scenario_3_{timestamp}.png"
-    targets_png_filename = get_data_dir() / f"satellites_to_targets_access_scenario_3_{timestamp}.png"
-    json_output_filename = get_data_dir() / f"satellite_target_visibility_data_scenario_3_{timestamp}.json"
+    # png_filename = (
+    #     get_data_dir()
+    #     / f"stk_access_data/satellites_mutual_access_scenario_{scenario_index}_{timestamp}.png"
+    # )
+    targets_png_filename = (
+        get_data_dir()
+        / f"stk_access_data/satellite_target_visibility_data_scenario_{scenario_index}_{timestamp}.png"
+    )
+    json_output_filename = (
+        get_data_dir()
+        / f"stk_access_data/satellite_target_visibility_data_scenario_{scenario_index}_{timestamp}.json"
+    )
 
     # 生成并保存卫星互可见性热力图
-    visualize_satellites_mutual_access(
-        satellites_mutual_access, output_file=png_filename
-    )
-    print(f"卫星互可见性热力图已保存到文件: {png_filename}")
+    # visualize_satellites_mutual_access(
+    #     satellites_mutual_access, output_file=png_filename
+    # )
+    # print(f"卫星互可见性热力图已保存到文件: {png_filename}")
 
     # 生成并保存卫星对目标可见性热力图
     visualize_satellites_to_targets_access(

@@ -11,8 +11,7 @@ from PIL import Image
 from matplotlib.font_manager import FontProperties
 from tqdm import tqdm
 
-from data_classes.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput, \
-    LLMConversationMessage
+from data_classes.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput
 
 # 设置matplotlib支持中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']
@@ -172,24 +171,25 @@ def create_global_target_colors(time_slices: List[dict]) -> dict:
     return target_colors
 
 
-def create_global_cluster_colors(clustor_data) -> dict:
+def create_global_cluster_colors(cluster_data) -> dict:
     """
     为所有时间切片中出现的分簇创建全局颜色映射，确保同一分簇在不同时间切片中使用相同颜色
     
     Args:
-        clustor_data: 分簇数据对象
+        cluster_data: 分簇数据对象
         
     Returns:
         dict: 分簇ID到颜色的映射字典
     """
     # 使用新的分簇连续性分析
-    continuity_analysis = analyze_cluster_continuity(clustor_data)
+    continuity_analysis = analyze_cluster_continuity(cluster_data)
     return continuity_analysis['stable_cluster_colors']
 
 
-def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dict:
+def analyze_cluster_continuity(cluster_data) -> dict:
     """
-    分析分簇的连续性，基于目标重叠度进行分簇跟踪和重新编号
+    分析分簇的连续性，基于Jaccard相似度和连接关系进行分簇跟踪和重新编号
+    参考验证器中的稳定性算法，使用更精确的连续性判断
     
     Args:
         cluster_data: 分簇数据对象
@@ -202,43 +202,82 @@ def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dic
             'stable_cluster_shapes': {stable_id: shape}
         }
     """
-    # 提取所有时间切片的分簇数据
-    time_cluster_data = []
-    for clustor in cluster_data.output_result_data:
-        timestamp_clusters = {}
-        for cluster_item in clustor:
-            timestamp = cluster_item.get('timestamp')
-            if timestamp not in timestamp_clusters:
-                timestamp_clusters[timestamp] = []
-            
-            if 'clusters' in cluster_item:
-                for cluster_dict in cluster_item['clusters']:
-                    cluster_info = {
-                        'cluster_id': cluster_dict.get('cluster_id'),
-                        'targets': set(cluster_dict.get('targets', [])),
-                        'sats': set(cluster_dict.get('sats', []))
-                    }
-                    timestamp_clusters[timestamp].append(cluster_info)
-            elif isinstance(cluster_item, dict) and 'cluster_id' in cluster_item:
-                cluster_info = {
-                    'cluster_id': cluster_item.get('cluster_id'),
-                    'targets': set(cluster_item.get('targets', [])),
-                    'sats': set(cluster_item.get('sats', []))
-                }
-                timestamp_clusters[timestamp].append(cluster_info)
-        
-        time_cluster_data.append(timestamp_clusters)
     
-    # 按时间戳排序，获取所有时间切片
-    all_timestamps = set()
-    for timestamp_clusters in time_cluster_data:
-        all_timestamps.update(timestamp_clusters.keys())
-    sorted_timestamps = sorted(all_timestamps)
+    def normalize_timestamp(timestamp_str):
+        """
+        统一时间戳格式
+        输入可能是: "2025-06-06T04:07:10Z" 或 "06 Jun 2025 04:07:10.000"
+        输出统一为: "2025-06-06T04:07:10Z"
+        """
+        from datetime import datetime
+        
+        # 尝试解析ISO格式
+        if 'T' in timestamp_str and 'Z' in timestamp_str:
+            return timestamp_str
+        
+        # 尝试解析原始数据格式: "06 Jun 2025 04:07:10.000"
+        try:
+            dt = datetime.strptime(timestamp_str, "%d %b %Y %H:%M:%S.%f")
+            return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            pass
+        
+        # 如果都失败，返回原字符串
+        return timestamp_str
+    
+    # 提取所有时间切片的分簇数据和连接信息
+    time_data = []
+    for conversation in cluster_data:  # cluster_data是List[LLMConversationMessage]
+        # 统一时间戳格式
+        original_timestamp = conversation.input.timestamp
+        normalized_timestamp = normalize_timestamp(original_timestamp)
+        
+        timestamp_info = {
+            'timestamp': normalized_timestamp,
+            'original_timestamp': original_timestamp,
+            'clusters': [],
+            'target_visibility': {},  # target_id -> set of sat_ids that can observe it
+            'sat_connectivity': {}    # sat_id -> set of connected sat_ids
+        }
+        
+        # 提取分簇信息
+        for cluster in conversation.response.clusters:
+            cluster_info = {
+                'cluster_id': cluster.cluster_id,
+                'targets': set(cluster.targets),
+                'sats': set(cluster.sats),
+                'master': cluster.master
+            }
+            timestamp_info['clusters'].append(cluster_info)
+        
+        # 提取目标可见性连接关系
+        for edge in conversation.input.target_edges:
+            target_id = edge.target_id
+            sat_id = edge.sat_id
+            if target_id not in timestamp_info['target_visibility']:
+                timestamp_info['target_visibility'][target_id] = set()
+            timestamp_info['target_visibility'][target_id].add(sat_id)
+        
+        # 提取卫星间连接关系  
+        for edge in conversation.input.sat_edges:
+            from_sat = edge.from_sat
+            to_sat = edge.to_sat
+            if from_sat not in timestamp_info['sat_connectivity']:
+                timestamp_info['sat_connectivity'][from_sat] = set()
+            if to_sat not in timestamp_info['sat_connectivity']:
+                timestamp_info['sat_connectivity'][to_sat] = set()
+            timestamp_info['sat_connectivity'][from_sat].add(to_sat)
+            timestamp_info['sat_connectivity'][to_sat].add(from_sat)
+        
+        time_data.append(timestamp_info)
+    
+    # 按时间戳排序
+    time_data.sort(key=lambda x: x['timestamp'])
     
     # 初始化稳定分簇跟踪
     stable_cluster_counter = 0
     cluster_mapping = {}  # {timestamp: {original_id: stable_id}}
-    stable_clusters_history = {}  # {stable_id: [targets_set_per_timestamp]}
+    stable_clusters_history = {}  # {stable_id: [cluster_composition_per_timestamp]}
     
     # 颜色和形状列表
     base_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
@@ -246,38 +285,223 @@ def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dic
                    '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D5A6BD']
     shapes = ['rectangle', 'circle', 'diamond', 'hexagon', 'rounded_rect', 'triangle', 'octagon']
     
-    def calculate_overlap_ratio(targets1, targets2):
-        """计算两个目标集合的重叠率"""
-        if not targets1 or not targets2:
+    def calculate_jaccard_similarity(set1, set2):
+        """计算两个集合的Jaccard相似度"""
+        if not set1 and not set2:
+            return 1.0
+        if not set1 or not set2:
             return 0.0
-        intersection = len(targets1.intersection(targets2))
-        union = len(targets1.union(targets2))
+        intersection = len(set1.intersection(set2))
+        union = len(set1.union(set2))
         return intersection / union if union > 0 else 0.0
     
-    def find_best_match(current_cluster, previous_stable_clusters, threshold=0.3):
-        """为当前分簇找到最佳的稳定分簇匹配"""
-        best_match = None
-        best_ratio = threshold
+    def check_legitimate_change(current_cluster, last_cluster_composition, target_visibility, sat_connectivity):
+        """
+        检查分簇变化是否合理，参考验证器中的豁免机制
+        返回 (is_legitimate, justification_reason)
+        """
+        # 从历史组合中分离目标和卫星（简化处理）
+        current_targets = current_cluster['targets']
+        current_sats = current_cluster['sats']
+        current_composition = current_targets | current_sats
         
-        for stable_id, history in previous_stable_clusters.items():
-            if history:  # 确保历史记录存在
-                last_targets = history[-1]
-                overlap_ratio = calculate_overlap_ratio(current_cluster['targets'], last_targets)
-                if overlap_ratio > best_ratio:
-                    best_ratio = overlap_ratio
-                    best_match = stable_id
+        # 估算历史分簇中的目标变化（基于当前输入数据中的目标）
+        lost_elements = last_cluster_composition - current_composition
         
-        return best_match, best_ratio
+        # 检查丢失的元素是否为目标（假设目标ID为字符串，卫星ID为数字）
+        for element in lost_elements:
+            # 简化判断：如果元素在target_visibility中，则认为是目标
+            if element in target_visibility:
+                # 检查这个目标在当前时刻是否还能被当前簇的卫星观测到
+                visible_sats_for_target = target_visibility.get(element, set())
+                still_visible_current_sats = current_sats & visible_sats_for_target
+                
+                # 如果当前簇的卫星都不能观测到这个目标，则变化合理
+                if not still_visible_current_sats:
+                    return True, f"目标{element}不再可被当前卫星观测"
+            
+            # 检查卫星连接性（假设是卫星）
+            elif element in sat_connectivity:
+                # 检查这个卫星是否与当前簇中卫星失去连接
+                connected_sats = sat_connectivity.get(element, set())
+                still_connected_current_sats = current_sats & connected_sats
+                
+                # 如果卫星与当前簇卫星都失去连接，则变化合理
+                if not still_connected_current_sats:
+                    return True, f"卫星{element}与当前簇失去连接"
+        
+        return False, "无明显合理原因"
+    
+    def find_optimal_cluster_matching(current_clusters, stable_clusters_history, target_visibility, sat_connectivity):
+        """
+        使用全局最优匹配算法为当前分簇找到最佳的稳定分簇匹配
+        采用匈牙利算法思想，确保全局最优而不是贪心局部最优
+        """
+        if not stable_clusters_history or not current_clusters:
+            return {}, []
+        
+        # 构建相似度矩阵
+        stable_ids = list(stable_clusters_history.keys())
+        similarity_matrix = []
+        
+        for current_cluster in current_clusters:
+            current_composition = current_cluster['targets'] | current_cluster['sats']
+            cluster_similarities = []
+            
+            for stable_id in stable_ids:
+                history = stable_clusters_history[stable_id]
+                if not history:
+                    cluster_similarities.append(0.0)
+                    continue
+                    
+                last_cluster_composition = history[-1]
+                
+                # 计算Jaccard相似度
+                jaccard_score = calculate_jaccard_similarity(current_composition, last_cluster_composition)
+                
+                # 如果Jaccard相似度低于阈值，检查变化是否合理
+                if jaccard_score < 0.8:
+                    is_legitimate, reason = check_legitimate_change(
+                        current_cluster, 
+                        last_cluster_composition,
+                        target_visibility, 
+                        sat_connectivity
+                    )
+                    
+                    # 如果变化合理，提高评分
+                    if is_legitimate:
+                        jaccard_score = min(jaccard_score + 0.3, 1.0)
+                
+                cluster_similarities.append(jaccard_score)
+            
+            similarity_matrix.append(cluster_similarities)
+        
+        # 实现纯基于内容相似度的最优分配算法
+        def find_optimal_assignment_content_based(similarity_matrix):
+            """
+            完全基于分簇内容相似度进行最优分配，不考虑分簇ID
+            使用匈牙利算法思想找到全局最优解
+            """
+            n_current = len(similarity_matrix)
+            n_stable = len(similarity_matrix[0]) if similarity_matrix else 0
+            
+            if n_current == 0 or n_stable == 0:
+                return {}
+            
+            # 动态规划：记忆化搜索实现最优分配
+            memo = {}
+            
+            def dp(current_mask, stable_mask, current_idx):
+                """
+                current_mask: 已分配的当前分簇集合（位掩码）
+                stable_mask: 已分配的稳定ID集合（位掩码）
+                current_idx: 当前处理到第几个分簇
+                返回: (最大相似度总和, 分配方案字典)
+                """
+                if current_idx == n_current:
+                    return (0.0, {})
+                
+                state = (current_mask, stable_mask, current_idx)
+                if state in memo:
+                    return memo[state]
+                
+                best_score = -1
+                best_assignment = {}
+                
+                # 选项1：不分配当前分簇（创建新的稳定ID）
+                future_score, future_assignment = dp(current_mask | (1 << current_idx), stable_mask, current_idx + 1)
+                if future_score > best_score:
+                    best_score = future_score
+                    best_assignment = future_assignment.copy()
+                
+                # 选项2：分配给某个未使用的稳定ID
+                for stable_idx in range(n_stable):
+                    if stable_mask & (1 << stable_idx):  # 已被使用
+                        continue
+                    
+                    similarity = similarity_matrix[current_idx][stable_idx]
+                    if similarity < 0.1:  # 相似度太低，不考虑
+                        continue
+                    
+                    future_score, future_assignment = dp(
+                        current_mask | (1 << current_idx), 
+                        stable_mask | (1 << stable_idx), 
+                        current_idx + 1
+                    )
+                    
+                    total_score = similarity + future_score
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_assignment = future_assignment.copy()
+                        best_assignment[current_idx] = stable_idx
+                
+                memo[state] = (best_score, best_assignment)
+                return (best_score, best_assignment)
+            
+            if n_current <= 10:  # 对于小规模问题使用精确算法
+                _, optimal_assignment = dp(0, 0, 0)
+                return optimal_assignment
+            else:
+                # 对于大规模问题，使用贪心算法
+                return greedy_assignment_content_based(similarity_matrix)
+        
+        def greedy_assignment_content_based(similarity_matrix):
+            """
+            贪心分配算法：优先分配相似度最高的匹配
+            """
+            assignments = {}
+            used_current = set()
+            used_stable = set()
+            
+            # 创建所有可能匹配的列表
+            all_matches = []
+            for i, similarities in enumerate(similarity_matrix):
+                for j, similarity in enumerate(similarities):
+                    if similarity >= 0.1:  # 最低阈值
+                        all_matches.append((similarity, i, j))
+            
+            # 按相似度从高到低排序
+            all_matches.sort(reverse=True)
+            
+            # 贪心分配：优先分配高相似度的匹配
+            for similarity, current_idx, stable_idx in all_matches:
+                if current_idx not in used_current and stable_idx not in used_stable:
+                    assignments[current_idx] = stable_idx
+                    used_current.add(current_idx)
+                    used_stable.add(stable_idx)
+            
+            return assignments
+        
+        # 使用纯基于内容的最优分配算法
+        optimal_assignment = find_optimal_assignment_content_based(similarity_matrix)
+        
+        # 转换为原有格式
+        assignments = {}
+        used_stable_ids = set()
+        matched_current_indices = set()
+        
+        for current_idx, stable_idx in optimal_assignment.items():
+            current_cluster = current_clusters[current_idx]
+            stable_id = stable_ids[stable_idx]
+            assignments[current_cluster['cluster_id']] = stable_id
+            used_stable_ids.add(stable_id)
+            matched_current_indices.add(current_idx)
+        
+        # 收集未匹配的分簇
+        unmatched_clusters = []
+        
+        # 收集未匹配的分簇
+        for i, current_cluster in enumerate(current_clusters):
+            if i not in matched_current_indices:
+                unmatched_clusters.append(current_cluster)
+        
+        return assignments, unmatched_clusters
     
     # 逐时间切片处理
-    for timestamp in sorted_timestamps:
+    for i, time_info in enumerate(time_data):
+        timestamp = time_info['timestamp']
         cluster_mapping[timestamp] = {}
-        current_clusters = []
-        
-        # 收集当前时间戳的所有分簇
-        for timestamp_clusters in time_cluster_data:
-            if timestamp in timestamp_clusters:
-                current_clusters.extend(timestamp_clusters[timestamp])
+        current_clusters = time_info['clusters']
         
         if not current_clusters:
             continue
@@ -287,36 +511,33 @@ def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dic
             for cluster in current_clusters:
                 stable_id = stable_cluster_counter
                 cluster_mapping[timestamp][cluster['cluster_id']] = stable_id
-                stable_clusters_history[stable_id] = [cluster['targets']]
+                cluster_composition = cluster['targets'] | cluster['sats']
+                stable_clusters_history[stable_id] = [cluster_composition]
                 stable_cluster_counter += 1
         else:
-            # 为当前分簇寻找最佳匹配
-            used_stable_ids = set()
-            unmatched_clusters = []
+            # 使用全局最优匹配算法为当前分簇寻找最佳匹配
+            optimal_assignments, unmatched_clusters = find_optimal_cluster_matching(
+                current_clusters, 
+                stable_clusters_history,
+                time_info['target_visibility'],
+                time_info['sat_connectivity']
+            )
             
-            # 按目标数量从大到小排序，优先处理大分簇
-            current_clusters.sort(key=lambda x: len(x['targets']), reverse=True)
-            
+            # 应用最优分配
             for cluster in current_clusters:
-                best_match, overlap_ratio = find_best_match(cluster, stable_clusters_history)
-                
-                if best_match is not None and best_match not in used_stable_ids:
-                    # 找到匹配，使用已有的稳定ID
-                    cluster_mapping[timestamp][cluster['cluster_id']] = best_match
-                    stable_clusters_history[best_match].append(cluster['targets'])
-                    used_stable_ids.add(best_match)
-                    print(f"时间戳 {timestamp}: 分簇 {cluster['cluster_id']} -> 稳定分簇 {best_match} (重叠率: {overlap_ratio:.2f})")
-                else:
-                    # 没有找到匹配，标记为未匹配
-                    unmatched_clusters.append(cluster)
+                if cluster['cluster_id'] in optimal_assignments:
+                    stable_id = optimal_assignments[cluster['cluster_id']]
+                    cluster_mapping[timestamp][cluster['cluster_id']] = stable_id
+                    cluster_composition = cluster['targets'] | cluster['sats']
+                    stable_clusters_history[stable_id].append(cluster_composition)
             
             # 为未匹配的分簇分配新的稳定ID
             for cluster in unmatched_clusters:
                 stable_id = stable_cluster_counter
                 cluster_mapping[timestamp][cluster['cluster_id']] = stable_id
-                stable_clusters_history[stable_id] = [cluster['targets']]
+                cluster_composition = cluster['targets'] | cluster['sats']
+                stable_clusters_history[stable_id] = [cluster_composition]
                 stable_cluster_counter += 1
-                print(f"时间戳 {timestamp}: 分簇 {cluster['cluster_id']} -> 新稳定分簇 {stable_id}")
     
     # 生成稳定分簇的颜色和形状映射
     all_stable_ids = list(stable_clusters_history.keys())
@@ -327,10 +548,6 @@ def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dic
         stable_cluster_colors[stable_id] = base_colors[i % len(base_colors)]
         stable_cluster_shapes[stable_id] = shapes[i % len(shapes)]
     
-    print(f"\n分簇连续性分析完成:")
-    print(f"- 总共识别出 {len(all_stable_ids)} 个稳定分簇")
-    print(f"- 分簇映射关系: {len(cluster_mapping)} 个时间戳")
-    
     return {
         'cluster_mapping': cluster_mapping,
         'stable_cluster_colors': stable_cluster_colors,
@@ -338,18 +555,18 @@ def analyze_cluster_continuity(cluster_data:List[LLMConversationMessage]) -> dic
     }
 
 
-def create_global_cluster_shapes(clustor_data) -> dict:
+def create_global_cluster_shapes(cluster_data) -> dict:
     """
     为所有分簇创建全局形状映射，确保同一分簇在不同时间切片中使用相同形状
     
     Args:
-        clustor_data: 分簇数据对象
+        cluster_data: 分簇数据对象
         
     Returns:
         dict: 分簇ID到形状的映射字典
     """
     # 使用新的分簇连续性分析
-    continuity_analysis = analyze_cluster_continuity(clustor_data)
+    continuity_analysis = analyze_cluster_continuity(cluster_data)
     return continuity_analysis['stable_cluster_shapes']
 
 
@@ -440,8 +657,23 @@ def get_time_slice_summary(time_slices: List[dict]) -> dict:
     return summary
 
 
+from datetime import datetime
+
+def convert_timestamp_format(timestamp_str):
+    """
+    将时间戳格式从 "06 Jun 2025 04:03:30.000" 转换为 "2025-06-06T04:03:30Z"
+    """
+    try:
+        # 解析原始格式
+        dt = datetime.strptime(timestamp_str, "%d %b %Y %H:%M:%S.%f")
+        # 转换为ISO格式
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception as e:
+        print(f"时间戳格式转换失败: {timestamp_str} -> {e}")
+        return timestamp_str
+
 def visualize_satellites_and_targets_on_map(all_data_frame: List[dict], 
-                                            clustor_data,  # 类型为ValidationInput
+                                            cluster_data,  # 类型为ValidationInput
                                             time_slice_index: int = 0,
                                             save_path: str|Path|None = None, 
                                             global_target_colors: dict|None = None,
@@ -453,7 +685,7 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
 
     Args:
         all_data_frame: 时间切片数据列表
-        clustor_data: 分簇数据
+        cluster_data: 分簇数据
         time_slice_index: 要可视化的时间切片索引，默认为0（第一个时间切片）
         save_path: 保存图片的路径，如果为None则显示图片
         global_target_colors: 全局目标颜色映射字典，确保不同时间切片中同一目标使用相同颜色
@@ -468,24 +700,22 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
     data_frame = all_data_frame[time_slice_index]
 
     current_clustor = None
-    for clustor in clustor_data.output_result_data:
-        if clustor[0]['timestamp'] == data_frame['timestamp']:
-            current_clustor = clustor
+    target_timestamp = data_frame['timestamp']
+    converted_timestamp = convert_timestamp_format(target_timestamp)
+    
+    for conversation in cluster_data:  # cluster_data是List[LLMConversationMessage]
+        if conversation.input.timestamp == converted_timestamp:
+            current_clustor = conversation.response.clusters
             break
+    
+    if current_clustor is None:
+        print(f"警告：未找到时间戳 {converted_timestamp} 对应的分簇数据")
     
     # 解析分簇数据
     current_clusters = []
     if current_clustor:
-        for cluster_item in current_clustor:
-            if 'clusters' in cluster_item:
-                # 将字典转换为ClusterInfo对象
-                for cluster_dict in cluster_item['clusters']:
-                    cluster_info = ClusterInfo(**cluster_dict)
-                    current_clusters.append(cluster_info)
-            # 处理直接的分簇列表（从ShareGPT数据中解析出来的）
-            elif isinstance(cluster_item, dict) and 'cluster_id' in cluster_item:
-                cluster_info = ClusterInfo(**cluster_item)
-                current_clusters.append(cluster_info)
+        # current_clustor已经是List[ClusterInfo]
+        current_clusters = current_clustor
 
     # 提取卫星位置并转换为经纬度
     satellite_lats = []
@@ -527,19 +757,29 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
     target_lons = []
     target_ids = []
     target_positions = {}  # 用于存储目标ID到位置的映射
+    processed_targets = set()  # 用于去重，确保同一目标只处理一次
 
     for target_obs in data_frame['target_visibility']:
+        # 处理新的数据结构
         to_target = target_obs.get('to_target', {})
         position = to_target.get('position', [])
-        if len(position) >= 3:
+        target_id = to_target.get('id', '')
+        
+        # 处理旧的数据结构
+        if not position and 'position' in target_obs:
+            position = target_obs.get('position', [])
+        if not target_id and 'target_id' in target_obs:
+            target_id = target_obs.get('target_id', 'Unknown')
+            
+        if len(position) >= 3 and target_id and target_id not in processed_targets:
             # ECEF坐标转换为经纬度（position单位为km，需要转换为m）
             x, y, z = position[0] * 1000, position[1] * 1000, position[2] * 1000
             lat, lon, alt = ecef2lla(x, y, z)
             target_lats.append(lat)
             target_lons.append(lon)
-            target_id = to_target.get('id', 'Unknown')
             target_ids.append(target_id)
             target_positions[target_id] = (lon, lat)
+            processed_targets.add(target_id)  # 标记为已处理
 
     # 尝试使用系统中已安装的中文字体
     try:
@@ -599,7 +839,6 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
 
     # 检查分簇数据
     if current_clusters:
-        print(f"找到 {len(current_clusters)} 个分簇，正在绘制分簇框...")
         draw_clusters_after_positions = True
     else:
         draw_clusters_after_positions = False
@@ -624,7 +863,7 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
         plt.scatter(target_lons, target_lats, 
                    c='#F72585', s=120, alpha=0.9, marker='*', 
                    edgecolors='#8B2635', linewidth=0.8, 
-                   label=f'目标 ({len(target_lats)})', zorder=5)
+                   label=f'目标 ({len(processed_targets)})', zorder=5)
 
         # 添加目标ID标签
         for lon, lat, target_id in zip(target_lons, target_lats, target_ids):
@@ -643,9 +882,28 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
             cluster_legend_info = create_cluster_colors_and_draw_shapes(
                 current_clusters, satellite_positions, target_positions, 
                 global_cluster_colors, global_cluster_shapes, current_cluster_mapping)
-            print(f"成功绘制了 {len(current_clusters)} 个分簇的形状框")
         except Exception as e:
-            print(f"绘制分簇形状框时出错: {e}")
+            pass
+
+    # 绘制卫星间连接线（深灰色虚线）
+    inter_satellite_count = 0
+    for inter_conn in data_frame['inter_satellite_connectivity']:
+        from_satellite = inter_conn.get('from_satellite', {})
+        to_satellite = inter_conn.get('to_satellite', {})
+        
+        from_sat_id = from_satellite.get('id')
+        to_sat_id = to_satellite.get('id')
+        
+        # 获取卫星的经纬度坐标
+        if from_sat_id in satellite_positions and to_sat_id in satellite_positions:
+            from_lon, from_lat = satellite_positions[from_sat_id]
+            to_lon, to_lat = satellite_positions[to_sat_id]
+            
+            # 绘制卫星间连接线：深灰色虚线，透明度0.6，dash样式(3,5)
+            plt.plot([from_lon, to_lon], [from_lat, to_lat],
+                     color="#7F7D7D", linewidth=0.8, alpha=0.5,
+                     linestyle='--', dashes=(3, 5))
+            inter_satellite_count += 1
 
     # 绘制卫星-目标可见性连接线（不同目标使用不同颜色）
     visibility_count = 0
@@ -692,6 +950,12 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
                 target_visibility_count[target_id] = 0
             target_visibility_count[target_id] += 1
             visibility_count += 1
+
+    # 添加卫星间连接线的图例项
+    if inter_satellite_count > 0:
+        plt.plot([], [], color='#4A4A4A', linewidth=1.0, alpha=0.6, 
+                 linestyle='--', dashes=(3, 5),
+                 label=f'卫星间连接 ({inter_satellite_count}条)')
 
     # 添加可见性连接线的图例项（总统计）
     if visibility_count > 0:
@@ -750,7 +1014,6 @@ def visualize_satellites_and_targets_on_map(all_data_frame: List[dict],
         # 使用固定的边界框，确保图片大小一致
         plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0.1,
                     facecolor='white', edgecolor='none')
-        print(f"图片已保存到: {save_path}")
     else:
         plt.show()
 
@@ -840,15 +1103,34 @@ def create_cluster_colors_and_draw_shapes(clusters: List[ClusterInfo],
         
         # 收集卫星位置
         for sat_id in cluster.sats:
-            sat_id_str = f"Satellite{sat_id}"
-            if sat_id_str in satellite_positions:
-                all_positions.append(satellite_positions[sat_id_str])
+            # sat_id 已经是完整的卫星ID格式（如 "Satellite152"），直接使用
+            if sat_id in satellite_positions:
+                all_positions.append(satellite_positions[sat_id])
         
         # 收集目标位置  
         for target_id in cluster.targets:
-            target_id_str = f"m{target_id}"
-            if target_id_str in target_positions:
-                all_positions.append(target_positions[target_id_str])
+            found_position = None
+            
+            # 首先尝试直接匹配
+            if str(target_id) in target_positions:
+                found_position = target_positions[str(target_id)]
+            else:
+                # 直接删除target_id中的所有字母，只保留数字
+                import re
+                target_id_numbers = re.sub(r'[a-zA-Z]', '', str(target_id))
+                
+                # 在target_positions中查找匹配的位置
+                for pos_key in target_positions.keys():
+                    # 删除位置键中的所有字母，只保留数字
+                    pos_key_numbers = re.sub(r'[a-zA-Z]', '', pos_key)
+                    
+                    # 如果删除字母后的数字部分与分簇target_id相等，就匹配
+                    if pos_key_numbers == target_id_numbers:
+                        found_position = target_positions[pos_key]
+                        break
+            
+            if found_position:
+                all_positions.append(found_position)
         
         # 为每个位置绘制形状
         for lon, lat in all_positions:
@@ -915,78 +1197,36 @@ def create_and_add_shape(lon, lat, shape_style, fill_color, border_color, size):
 # 示例使用
 if __name__ == "__main__":
     # 加载真实数据
-    data_file = get_data_dir() / "satellite_target_visibility_data_sc1.json"
+    # data_file = get_data_dir() / "satellite_target_visibility_data_sc1.json"
+    data_file = get_data_dir() / "stk_access_result_data/satellite_target_visibility_data_scenario_3_20250722_204803.json"
 
     if not data_file.exists():
-        exit("数据文件不存在，使用模拟数据...")
+        exit("数据文件不存在...")
 
     time_slices = load_raw_data(data_file)
-    cluster_data = load_sharegpt_data(get_data_dir() / "clustering_results_cmax_20001.jsonl")
-    # time_slices = time_slices[1:19]
-
-    print(f"成功加载 {len(time_slices)} 个时间切片")
+    # cluster_data = load_sharegpt_data(get_data_dir() / "clustering_results_cmax_20001.jsonl")
+    # time_slices = time_slices[1:3]
+    cluster_data = load_sharegpt_data(get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_3.jsonl")
 
     # 获取数据摘要
     summary = get_time_slice_summary(time_slices)
-    print("\n数据摘要:")
-    print(f"- 总时间切片数: {summary['total_time_slices']}")
-    print(f"- 时间范围: {summary['time_range']}")
-    print(f"- 唯一卫星数: {len(summary['unique_satellites'])}")
-    print(f"- 唯一目标数: {len(summary['unique_targets'])}")
-    print(f"- 总连接数: {summary['connectivity_stats']['total_connections']}")
-    print(f"- 平均每切片连接数: {summary['connectivity_stats']['avg_connections_per_slice']:.2f}")
-    print(f"- 总观测数: {summary['target_stats']['total_observations']}")
-    print(f"- 平均每切片观测数: {summary['target_stats']['avg_observations_per_slice']:.2f}")
-
-    # # 显示前几个时间切片的详细信息
-    # print("\n前3个时间切片详情:")
-    # for i, slice_data in enumerate(time_slices[:3]):
-    #     print(f"\n时间切片 {i + 1}:")
-    #     print(f"  时间戳: {slice_data['timestamp']}")
-    #     print(f"  时间偏移: {slice_data['time_offset_from_scenario_start']}秒")
-
-    #     # 显示卫星信息
-    #     satellites = slice_data['satellites']
-    #     satellite_ids = [sat.get('id', 'N/A') for sat in satellites]
-    #     print(f"  卫星数量: {len(satellites)}")
-    #     print(f"  卫星ID: {satellite_ids}")
-
-    #     print(f"  卫星间连接数: {len(slice_data['inter_satellite_connectivity'])}")
-    #     print(f"  目标观测数: {len(slice_data['target_visibility'])}")
-
-    #     # 显示目标信息
-    #     if slice_data['target_visibility']:
-    #         targets = [obs.get('to_target', {}).get('id', obs.get('target_id', 'Unknown'))
-    #                    for obs in slice_data['target_visibility']]
-    #         print(f"  观测目标: {list(set(targets))}")
-
-    #     # 显示连接信息
-    #     if slice_data['inter_satellite_connectivity']:
-    #         connections = slice_data['inter_satellite_connectivity']
-    #         print(f"  连接关系示例: {connections[0] if connections else 'None'}")
 
     # 可视化第一个时间切片的卫星和目标分布
-    print("\n生成卫星和目标位置分布图...")
     try:
         # 创建可视化图片保存目录
-        visualize_dir = get_project_root() / "visualization/visualize_figs_scenario_1_test"
+        visualize_dir = get_project_root() / "visualization/visualize_figs_scenario_3_test"
         visualize_dir.mkdir(exist_ok=True)
 
         # 进行全局分簇连续性分析
-        print("\n进行分簇连续性分析...")
         continuity_analysis = analyze_cluster_continuity(cluster_data)
         
         # 创建全局目标颜色映射，确保所有时间切片中同一目标使用相同颜色
         global_target_colors = create_global_target_colors(time_slices)
-        print(f"为 {len(global_target_colors)} 个目标分配了固定颜色: {list(global_target_colors.keys())}")
 
         # 使用连续性分析结果创建稳定的分簇颜色和形状映射
         global_cluster_colors = continuity_analysis['stable_cluster_colors']
         global_cluster_shapes = continuity_analysis['stable_cluster_shapes']
         cluster_mapping = continuity_analysis['cluster_mapping']
-        
-        print(f"为 {len(global_cluster_colors)} 个稳定分簇分配了固定颜色")
-        print(f"为 {len(global_cluster_shapes)} 个稳定分簇分配了固定形状")
 
         for index in tqdm(range(len(time_slices)), desc="生成可视化图片"):
             visualize_fig_save_path = visualize_dir / f"satellite_target_map_with_clusters_{index:03d}.png"
