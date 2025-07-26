@@ -161,7 +161,7 @@ class OptimizationDistiller:
 
     def optimize_single_validation_item(
         self, validation_item: ValidationItem, sample_index: int = 0
-    ) -> Optional[tuple[ClusterOptimizationOutput, str]]:
+    ) -> Optional[tuple[ClusterOptimizationOutput, str, dict]]:
         """优化单个验证项
 
         Args:
@@ -169,7 +169,7 @@ class OptimizationDistiller:
             sample_index: 样本索引，用于错误追踪
 
         Returns:
-            (思维链, 优化结果, 格式化系统提示) 的元组，如果优化失败则返回None
+            (优化结果, 格式化系统提示, 原始输出信息) 的元组，如果优化失败则返回None
         """
         try:
             # 应用速率限制
@@ -245,10 +245,18 @@ class OptimizationDistiller:
                     # 如果没有思考内容，直接使用优化结果
                     optimization_result.chain_of_thought = "<think></think>"
 
+                # 保存原始输出信息
+                raw_output_info = {
+                    "reasoning_content": reasoning_content,
+                    "raw_content": content,
+                    "parsed_successfully": True,
+                    "timestamp": get_current_timestamp(),
+                }
+
                 print(
                     f"✅ 样本 {sample_index} 优化成功 - 是否优化: {optimization_result.is_optimized}"
                 )
-                return optimization_result, system_prompt
+                return optimization_result, system_prompt, raw_output_info
 
             except Exception as e:
                 print(f"❌ 样本 {sample_index} 优化失败 - 解析输出失败: {str(e)}")
@@ -313,7 +321,7 @@ class OptimizationDistiller:
                 stats_queue.put("failed")
                 return
 
-            optimization_result, formatted_system_prompt = result
+            optimization_result, formatted_system_prompt, raw_output_info = result
 
             # 创建ShareGPT格式数据
             sharegpt_data = self.create_sharegpt_format(
@@ -322,8 +330,20 @@ class OptimizationDistiller:
                 formatted_system_prompt,
             )
 
-            # 写入成功结果
-            writer.write_line(sharegpt_data.model_dump_json())
+            # 保存完整的处理结果（包含原始输出）
+            full_result = {
+                "sample_index": index,
+                "timestamp": get_current_timestamp(),
+                "model": self.model_name,
+                "input_validation_item": validation_item.model_dump(),
+                "raw_optimization_output": optimization_result.model_dump(),
+                "formatted_system_prompt": formatted_system_prompt,
+                "raw_llm_output": raw_output_info,  # 添加原始LLM输出
+                "sharegpt_format": sharegpt_data.model_dump(),
+            }
+
+            # 写入完整结果
+            writer.write_line(json.dumps(full_result, ensure_ascii=False))
             stats_queue.put("success")
 
         except Exception as e:
@@ -350,6 +370,10 @@ class OptimizationDistiller:
         """
         # 初始化线程安全的写入器
         writer = ThreadSafeWriter(output_file)
+        
+        # 创建ShareGPT专用输出文件
+        sharegpt_output_file = output_file.parent / f"sharegpt_{output_file.name}"
+        sharegpt_writer = ThreadSafeWriter(sharegpt_output_file)
 
         # 统计信息队列
         stats_queue = Queue()
@@ -359,12 +383,15 @@ class OptimizationDistiller:
 
         # 使用线程池处理
         print(f"开始多线程处理，使用 {self.max_workers} 个线程")
+        print(f"📁 完整输出: {output_file}")
+        print(f"📁 ShareGPT格式: {sharegpt_output_file}")
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # 提交所有任务
             future_to_index = {
                 executor.submit(
-                    self.process_single_item, item, writer, stats_queue
+                    self.process_single_item_with_dual_output, 
+                    item, writer, sharegpt_writer, stats_queue
                 ): item[0]
                 for item in indexed_data
             }
@@ -394,6 +421,72 @@ class OptimizationDistiller:
         print(f"成功率: {stats['success'] / stats['total'] * 100:.2f}%")
         
         return stats["success"], stats["failed"]
+
+    def process_single_item_with_dual_output(
+        self,
+        item_data: Tuple[int, ValidationItem],
+        full_writer: ThreadSafeWriter,
+        sharegpt_writer: ThreadSafeWriter,
+        stats_queue: Queue,
+    ) -> None:
+        """处理单个数据项并写入两个输出文件"""
+        index, validation_item = item_data
+
+        try:
+            # 处理数据
+            result = self.optimize_single_validation_item(validation_item, index)
+
+            if result is None:
+                # 记录错误
+                error_data = {
+                    "error": "优化失败",
+                    "sample_index": index,
+                    "timestamp": get_current_timestamp(),
+                    "model": self.model_name,
+                }
+                error_json = f"ERROR: {json.dumps(error_data, ensure_ascii=False)}"
+                full_writer.write_line(error_json)
+                sharegpt_writer.write_line(error_json)
+                stats_queue.put("failed")
+                return
+
+            optimization_result, formatted_system_prompt, raw_output_info = result
+
+            # 创建ShareGPT格式数据
+            sharegpt_data = self.create_sharegpt_format(
+                validation_item,
+                optimization_result,
+                formatted_system_prompt,
+            )
+
+            # 保存完整的处理结果（用于分析和调试）
+            full_result = {
+                "sample_index": index,
+                "timestamp": get_current_timestamp(),
+                "model": self.model_name,
+                "input_validation_item": validation_item.model_dump(),
+                "raw_optimization_output": optimization_result.model_dump(),
+                "formatted_system_prompt": formatted_system_prompt,
+                "raw_llm_output": raw_output_info,
+                "sharegpt_format": sharegpt_data.model_dump(),
+            }
+
+            # 分别写入两个文件
+            full_writer.write_line(json.dumps(full_result, ensure_ascii=False))
+            sharegpt_writer.write_line(sharegpt_data.model_dump_json())
+            stats_queue.put("success")
+
+        except Exception as e:
+            error_data = {
+                "error": f"处理异常: {str(e)}",
+                "sample_index": index,
+                "timestamp": get_current_timestamp(),
+                "model": self.model_name,
+            }
+            error_json = f"ERROR: {json.dumps(error_data, ensure_ascii=False)}"
+            full_writer.write_line(error_json)
+            sharegpt_writer.write_line(error_json)
+            stats_queue.put("failed")
 
     def process_validation_data_batch(
         self, validation_data: List[ValidationItem], output_file: Path
@@ -474,13 +567,20 @@ def main():
     )
     print(f"📈 成功率: {success_count / len(validation_data) * 100:.1f}%")
     
+    # 输出文件信息
+    sharegpt_output_file = output_file.parent / f"sharegpt_{output_file.name}"
+    print(f"\n📁 输出文件:")
+    print(f"- 完整数据（含原始输出）: {output_file}")
+    print(f"- ShareGPT训练格式: {sharegpt_output_file}")
+    
     # 提供优化建议
     print(f"\n💡 优化建议:")
     print(f"1. 如果成功率较高，可以将 max_workers 增加到 5-6")
     print(f"2. 如果遇到429错误，降低 requests_per_minute 或 max_workers")
     print(f"3. 如果需要更高质量的优化，可以降低 temperature")
     print(f"4. 当前使用模型: {distiller.model_name}")
-    print(f"5. 结果已保存到: {output_file}")
+    print(f"5. 完整数据可用于分析优化效果和调试")
+    print(f"6. ShareGPT格式可直接用于模型训练")
 
 
 if __name__ == "__main__":
