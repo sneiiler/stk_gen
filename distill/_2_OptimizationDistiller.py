@@ -290,7 +290,7 @@ class OptimizationDistiller:
             messages=[
                 ShareGPTMessage(role="system", content=formatted_system_prompt),
                 ShareGPTMessage(role="user", content=user_content),
-                ShareGPTMessage(role="assistant", content=optimization_result.to_think_json()),
+                ShareGPTMessage(role="assistant", content=optimization_result.model_dump_json()),
             ]
         )
 
