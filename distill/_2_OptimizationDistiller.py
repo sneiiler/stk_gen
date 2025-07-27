@@ -42,7 +42,8 @@ load_dotenv(env_path, override=True)
 # 获取API配置
 api_base_openai = os.getenv("DASHSCOPE_API_BASE")
 api_key_openai = os.getenv("DASHSCOPE_API_KEY")
-
+api_base_openai = "http://127.0.0.1:11400/v1/"
+api_key_openai = "sk-123456"
 print(f"API配置: {'✓' if api_key_openai and api_base_openai else '✗'}")
 
 if not api_key_openai or not api_base_openai:
@@ -535,11 +536,11 @@ def main():
     if not validation_data:
         print("❌ 没有有效的验证数据")
         return
-    validation_data = validation_data[:5]
+    # validation_data = validation_data[:5]
 
     # 初始化优化蒸馏器
     distiller = OptimizationDistiller(
-        model_name="qwen3-235b-a22b-thinking-2507",  # 可以根据需要修改
+        model_name="qwen3-32b",  # 可以根据需要修改
         temperature=0.3,
         requests_per_minute=60,  # 根据API限制调整
         max_workers=3,  # 建议从3开始，成功后可以增加到5-6
