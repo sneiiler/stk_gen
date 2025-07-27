@@ -379,8 +379,8 @@ class SatelliteClusteringAlgorithm:
         # 获取卫星数量
         n_sats = insight_matrix.shape[0]
 
-        # 获取所有卫星ID - 保持字符串格式以匹配 sat_target_vis 中的键
-        sat_ids = [f"Satellite{attr.id}" for attr in constellation.sat_attrs]
+        # 获取所有卫星ID - 直接使用字符串格式，避免双重前缀
+        sat_ids = [attr.id for attr in constellation.sat_attrs]
 
         # 创建优化问题
         prob = LpProblem("Satellite_Clustering", LpMaximize)
@@ -452,13 +452,13 @@ class SatelliteClusteringAlgorithm:
             overlap_dict: 卫星对目标的重叠度字典 {(sat_i, sat_j, target_k): overlap}
             satellite_target_visibility: 卫星对目标的可见性字典 {(sat_id, target_id): quality}
         """
-        # 获取所有卫星ID并创建映射 - 保持字符串格式以匹配 target_edges 中的 sat_id
-        sat_ids = [f"Satellite{attr.id}" for attr in constellation.sat_attrs]
+        # 获取所有卫星ID并创建映射 - 直接使用字符串格式，避免双重前缀
+        sat_ids = [attr.id for attr in constellation.sat_attrs]
         sat_id_to_idx = {sat_id: idx for idx, sat_id in enumerate(sat_ids)}
         n_sats = len(sat_ids)
 
-        # 创建卫星ID到位置的映射 - 使用字符串格式的卫星ID
-        sat_positions = {f"Satellite{attr.id}": attr.pos for attr in constellation.sat_attrs}
+        # 创建卫星ID到位置的映射 - 直接使用字符串格式的卫星ID
+        sat_positions = {attr.id: attr.pos for attr in constellation.sat_attrs}
 
         # 初始化矩阵
         insight_matrix = np.zeros((n_sats, n_sats))
@@ -839,11 +839,21 @@ class SatelliteClusteringAlgorithm:
             for target in cluster.targets:
                 visible_sats = []
                 for sat in cluster.sats:
+                    # 确保使用正确的格式进行查找
+                    # sat_target_vis 的键格式是 (sat_id, target_id)
                     if (sat, target) in sat_target_vis:
                         visible_sats.append(sat)
 
                 if not visible_sats:
                     print(f"⚠️  警告：簇 {cluster.cluster_id} 中目标 {target} 不被任何卫星观测")
+                    # 调试信息：显示该目标在 sat_target_vis 中的相关记录
+                    target_records = [(k, v) for k, v in sat_target_vis.items() if k[1] == target]
+                    print(f"     调试：目标 {target} 在 sat_target_vis 中的记录数: {len(target_records)}")
+                    if target_records:
+                        print(f"     调试：前5条记录: {target_records[:5]}")
+                    
+                    # 调试信息：显示簇中卫星的格式
+                    print(f"     调试：簇中卫星格式: {cluster.sats[:3]}") # 只显示前3个
 
         # 计算整体负载均衡度
         load_ratios = [len(c.targets) / len(c.sats) for c in clusters if c.sats]
@@ -1285,7 +1295,7 @@ def load_data(file_path: Path) -> List[RawConstellationDataModel]:
 # 示例使用
 if __name__ == "__main__":
     # 加载数据
-    data_file = get_data_dir() / "stk_access_result_data/raw_constellation_data_scenario_3.jsonl"
+    data_file = get_data_dir() / "stk_access_result_data/raw_constellation_data_scenario_1.jsonl"
 
     if not data_file.exists():
         print("数据文件不存在，请检查路径...")
