@@ -1556,7 +1556,7 @@ class ClusterDataValidator:
 if __name__ == "__main__":
     import sys
     timestamp = get_current_timestamp()
-    data_path = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_3_with_history.jsonl"
+    data_path = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_1_with_history.jsonl"
     raw_data: List[LLMConversationMessage] = load_sharegpt_data(data_path)
     validator = ClusterDataValidator()
 
