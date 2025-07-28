@@ -1,7 +1,7 @@
 """
 基于Gemini模型的多线程数据蒸馏系统实现。
 
-This module implements a multi-threaded data distillation system using Gemini models
+This module implements a multithreaded data distillation system using Gemini models
 through OpenAI-compatible interface for better universality and performance.
 """
 
@@ -36,13 +36,12 @@ from misc_tools.sharegpt_utils import create_sharegpt_format
 from data_classes.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
-    SatelliteClusterClearOutput,
     SatelliteClusterOutput,
 )
 from dotenv import load_dotenv
 
 env_path = get_project_root() / ".env"
-load_dotenv(env_path)
+load_dotenv(env_path, override=True)
 
 # 获取Gemini API配置
 api_base_gemini = os.getenv("GEMINI_API_BASE")
@@ -111,13 +110,13 @@ class DataDistiller:
     """
 
     def __init__(
-        self,
-        model_name: str = "",
-        temperature: float = 0.1,
-        proxy: Optional[str] = None,
-        requests_per_minute: int = 60,
-        max_workers: int = 5,
-        reasoning_effort: str = "high",  # low, medium, high
+            self,
+            model_name: str = "",
+            temperature: float = 0.1,
+            proxy: Optional[str] = None,
+            requests_per_minute: int = 60,
+            max_workers: int = 5,
+            reasoning_effort: str = "high",  # low, medium, high
     ):
         """初始化数据蒸馏器。
 
@@ -157,7 +156,7 @@ class DataDistiller:
 
         # 创建输出解析器
         self.output_parser = PydanticOutputParser(
-            pydantic_object=SatelliteClusterClearOutput
+            pydantic_object=SatelliteClusterOutput
         )
 
         print(f"Gemini数据蒸馏器初始化完成:")
@@ -178,7 +177,6 @@ class DataDistiller:
 
                 delta = chunk.choices[0].delta
 
-
                 # 获取思考过程（reasoning）- Gemini 2.5不支持
                 if hasattr(delta, "reasoning_content") and delta.reasoning_content:
                     reasoning_content += delta.reasoning_content
@@ -187,8 +185,6 @@ class DataDistiller:
                 if hasattr(delta, "content") and delta.content:
                     content += delta.content
                     print(f"获取到新的content，长度: {len(delta.content)}")
-
-
 
                 # 检查是否是Gemini的思维链内容（包含在<thought>标签中）
                 thought_match = re.search(
@@ -208,7 +204,7 @@ class DataDistiller:
         return reasoning_content.strip(), content.strip()
 
     def generate_distill_result(
-        self, data: Dict[str, Any], sample_index: int = 0
+            self, data: Dict[str, Any], sample_index: int = 0
     ) -> Tuple[Optional[SatelliteClusterOutput], str, str]:
         """生成蒸馏结果。
 
@@ -246,16 +242,13 @@ class DataDistiller:
 
             print(system_prompt)
 
-
             messages = [
                 {"role": "system", "content": system_prompt.strip()},
                 {"role": "user", "content": user_content.strip()},
             ]
-            ic(messages)
-            exit()
 
             # 创建流式请求 - 针对Gemini优化
-            response = self.client.chat.completions.create(
+            response = self.client.chat.completions.create( # type: ignore
                 model=self.model_name,
                 # reasoning_effort=self.reasoning_effort,  # Gemini 2.5支持 # type: ignore
                 messages=messages,  # type: ignore
@@ -293,7 +286,7 @@ class DataDistiller:
                 if reasoning_content:
                     cot = f"{reasoning_content}\n思考过程总结:\n{cot}"
 
-                result = SatelliteClusterClearOutput(
+                result = SatelliteClusterOutput(
                     chain_of_thought=cot,
                     clusters=[
                         ClusterInfo(
@@ -320,13 +313,11 @@ class DataDistiller:
             print(error_msg)
             return None, "", error_msg
 
-
-
     def process_single_item(
-        self,
-        item_data: Tuple[int, Dict[str, Any]],
-        writer: ThreadSafeWriter,
-        stats_queue: Queue,
+            self,
+            item_data: Tuple[int, Dict[str, Any]],
+            writer: ThreadSafeWriter,
+            stats_queue: Queue,
     ) -> None:
         """处理单个数据项（在线程中调用）"""
         index, data = item_data
@@ -374,9 +365,9 @@ class DataDistiller:
             stats_queue.put("failed")
 
     def process_batch_multithread(
-        self,
-        batch_data: List[Dict[str, Any]],
-        output_file: Path,
+            self,
+            batch_data: List[Dict[str, Any]],
+            output_file: Path,
     ) -> None:
         """多线程批量处理数据并实时保存。
 
@@ -427,7 +418,7 @@ class DataDistiller:
 
         # 打印统计信息
         print(f"多线程处理完成统计: {stats}")
-        print(f"成功率: {stats['success']/stats['total']*100:.2f}%")
+        print(f"成功率: {stats['success'] / stats['total'] * 100:.2f}%")
 
 
 def load_json_data(file_path: Path) -> List[Dict[str, Any]]:
@@ -448,7 +439,7 @@ def main():
     """主函数。"""
     # 从JSON文件加载数据
     input_file = (
-        get_data_dir() / "satellite_target_visibility_data_sc1.json"
+            get_data_dir() / "satellite_target_visibility_data_sc1.json"
     )
     batch_data = load_json_data(input_file)
 
@@ -470,8 +461,8 @@ def main():
     # 生成输出文件路径
     now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = (
-        get_data_dir()
-        / f"training_data_sharegpt_{model_name}_{now}_{str(input_file)[-10:-5]}.jsonl"
+            get_data_dir()
+            / f"training_data_sharegpt_{model_name}_{now}_{str(input_file)[-10:-5]}.jsonl"
     )
 
     print(f"\n📋 处理配置:")

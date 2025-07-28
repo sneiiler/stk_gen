@@ -142,28 +142,50 @@ def crop_images_to_reference(input_dir, output_dir=None, reference_image=None):
     print(f"跳过: {skipped_count} 张图片")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="将图片裁剪成与参考图片相同的尺寸")
-    parser.add_argument("--input-dir", "-i", 
-                       default="visualization/visualize_figs_scenario_1_test",
-                       help="输入图片目录 (默认: documents/visualize_figs)")
-    parser.add_argument("--output-dir", "-o", 
-                       default=None,
-                       help="输出目录 (默认: documents/visualize_figs/cropped)")
-    parser.add_argument("--reference", "-r",
-                       default=None,
-                       help="参考图片路径 (默认: 使用最小尺寸图片)")
-
+def process_subdirectories():
+    """
+    处理visualization/visualize_figs_scenario_3_test目录下的所有子文件夹
+    """
+    base_input_dir = "visualization/visualize_figs_scenario_3_test"
     
-    args = parser.parse_args()
-    
-    # 检查输入目录是否存在
-    if not os.path.exists(args.input_dir):
-        print(f"错误: 输入目录 {args.input_dir} 不存在")
+    # 检查基础输入目录是否存在
+    if not os.path.exists(base_input_dir):
+        print(f"错误: 输入目录 {base_input_dir} 不存在")
         return
     
-    # 实际处理
-    crop_images_to_reference(args.input_dir, args.output_dir, args.reference)
+    # 获取所有子目录
+    subdirs = [d for d in os.listdir(base_input_dir) 
+              if os.path.isdir(os.path.join(base_input_dir, d))]
+    
+    if not subdirs:
+        print(f"在目录 {base_input_dir} 中没有找到子文件夹，直接处理当前目录")
+        # 如果没有子目录，直接处理当前目录
+        output_dir = os.path.join(base_input_dir, "cropped")
+        crop_images_to_reference(base_input_dir, output_dir, None)
+        return
+    
+    print(f"找到 {len(subdirs)} 个子文件夹: {', '.join(subdirs)}")
+    
+    # 处理每个子目录
+    for subdir in subdirs:
+        input_path = os.path.join(base_input_dir, subdir)
+        output_path = os.path.join(base_input_dir, f"{subdir}_cropped")
+        
+        print(f"\n{'='*50}")
+        print(f"正在处理子目录: {subdir}")
+        print(f"输入路径: {input_path}")
+        print(f"输出路径: {output_path}")
+        print(f"{'='*50}")
+        
+        # 处理当前子目录
+        crop_images_to_reference(input_path, output_path, None)
+
+
+def main():
+    """
+    主函数：处理visualization/visualize_figs_scenario_3_test目录下的所有子文件夹
+    """
+    process_subdirectories()
 
 
 if __name__ == "__main__":
