@@ -373,7 +373,6 @@ class ClusterDataValidator:
         score_penalty = 0
         errors = []
         warnings = []
-        info_logs = []
 
         # === 1. 历史数据有效性检查 ===
         history_results = conversation.input.history_cluster_result
@@ -516,7 +515,7 @@ class ClusterDataValidator:
                             adjustments.append(f"增加卫星{added_sats}")
                         if invisible_removed:
                             adjustments.append(f"移除不可见卫星{invisible_removed}")
-                        info_logs.append(
+                        warnings.append(
                             f"[INFO] 目标{target}簇调整：{', '.join(adjustments)}"
                         )
                     elif not still_visible_removed and added_sats:
@@ -526,12 +525,12 @@ class ClusterDataValidator:
                             adjustments.append(f"增加卫星{added_sats}")
                         if removed_sats:
                             adjustments.append(f"移除不可见卫星{removed_sats}")
-                        info_logs.append(
+                        warnings.append(
                             f"[INFO] 目标{target}簇调整：{', '.join(adjustments)}"
                         )
                 elif added_sats:
                     # 只是增加了卫星
-                    info_logs.append(
+                    warnings.append(
                         f"[INFO] 目标{target}簇调整：增加卫星{added_sats}"
                     )
 
@@ -599,14 +598,14 @@ class ClusterDataValidator:
                 # 如果卫星在当前时间切片，与旧伙伴卫星已无任何连接
                 if not last_companions.intersection(connected_sats):
                     justified_satellite_switches += 1
-                    info_logs.append(
+                    warnings.append(
                         f"[INFO] 卫星{satellite}切换被豁免：与原伙伴卫星{last_companions}已无连接"
                     )
                     continue  # 跳过，不计入惩罚
 
                 # 检查这个卫星是否已经因为目标切换被惩罚过了
                 if satellite in satellites_penalized_for_targets:
-                    info_logs.append(
+                    warnings.append(
                         f"[INFO] 卫星{satellite}切换不重复扣分：已在目标切换中惩罚"
                     )
                     continue  # 跳过，避免重复惩罚
@@ -630,7 +629,7 @@ class ClusterDataValidator:
                             adjustments.append(f"增加伙伴{added_sats}")
                         if removed_sats:
                             adjustments.append(f"移除伙伴{removed_sats}")
-                        info_logs.append(
+                        warnings.append(
                             f"[INFO] 卫星{satellite}簇调整：{', '.join(adjustments)}"
                         )
 
@@ -708,7 +707,7 @@ class ClusterDataValidator:
                     f"[WARNING] 簇重叠率{avg_jaccard:.1%}低于80%阈值，因不合理切换占比{unjustified_ratio:.1%}，扣{jaccard_penalty:.1f}分"
                 )
             elif unjustified_switches == 0:
-                info_logs.append(
+                warnings.append(
                     f"[INFO] Jaccard相似度惩罚被豁免：所有成员切换均为合理调整，虽然簇重叠率({avg_jaccard:.1%})较低，但不扣分。"
                 )
 
@@ -720,11 +719,6 @@ class ClusterDataValidator:
 
         # 构建详细信息
         info_parts = []
-
-        # 添加豁免信息
-        if info_logs:
-            for log in info_logs:
-                info_parts.append(log)
 
         # 添加警告信息
         if warnings:
@@ -757,6 +751,12 @@ class ClusterDataValidator:
         1. 致命错误检测：主节点不在簇内、簇内存在孤星 → 扣全部100分，标记ERROR错误
         2. 通信代价评估：分析簇内同步代价和全网同步代价 → 按代价比例扣分（最多100分）
 
+        通信代价计算说明：
+        - 星座总代价：找到连通度最高的卫星作为整个星座的最优主节点，计算所有其他卫星到此主节点的通信代价之和
+        - 路径规划：使用sat_edges提供的连接关系作为跳板进行最短路径计算
+        - 分簇代价：簇内同步代价 + 簇间主节点通信代价
+        - 效率评估：分簇方案的总代价 vs 星座最优主节点方案的代价
+
         扣分机制：
         - 主节点无效或孤星存在：直接扣满分100分
         - 通信代价过高：按占总星座代价比例映射扣分
@@ -770,11 +770,11 @@ class ClusterDataValidator:
         # 构建卫星基础信息
         sat_positions = {}
         sat_distances = {}
-        all_satellites = set()
+        constellation_satellites = set()  # 从sat_attrs中获取的所有卫星
 
         for sat_attr in conversation.input.sat_attrs:
             sat_positions[sat_attr.id] = sat_attr.pos
-            all_satellites.add(sat_attr.id)
+            constellation_satellites.add(sat_attr.id)
 
         for edge in conversation.input.sat_edges:
             sat_distances[(edge.from_sat, edge.to_sat)] = edge.distance
@@ -860,7 +860,7 @@ class ClusterDataValidator:
         total_inter_cluster_cost = 0
         cluster_cost_details = []
 
-        # 计算簇内同步代价
+        # 计算簇内同步代价 TODO 计算通信代价应该考虑和主节点的健康度相关
         for cluster_idx, cluster in enumerate(conversation.response.clusters):
             cluster_sats = cluster.sats
             master_sat = cluster.master
@@ -893,7 +893,7 @@ class ClusterDataValidator:
         for i, master1 in enumerate(masters):
             for master2 in masters[i + 1 :]:
                 path_cost = self._find_shortest_path_cost(
-                    master1, master2, sat_distances, all_satellites
+                    master1, master2, sat_distances, constellation_satellites
                 )
 
                 if path_cost is not None:
@@ -902,16 +902,23 @@ class ClusterDataValidator:
 
         total_cost = total_intra_cluster_cost + total_inter_cluster_cost
 
-        # 计算星座总通信代价作为基准（所有可联通的卫星对之间的最短路径代价总和）
-        total_constellation_cost = 0
-        for i, sat1 in enumerate(all_satellites):
-            for sat2 in list(all_satellites)[i + 1 :]:
-                # 计算任意两颗卫星之间的最短路径代价
-                path_cost = self._find_shortest_path_cost(
-                    sat1, sat2, sat_distances, all_satellites
-                )
-                if path_cost is not None:
-                    total_constellation_cost += path_cost
+        # 计算星座总通信代价作为基准（找到连通度最高的卫星作为主节点，计算所有卫星到主节点的通信代价）
+        constellation_satellites = set()
+        for sat_attr in conversation.input.sat_attrs:
+            constellation_satellites.add(sat_attr.id)
+        
+        # 找到连通度最高的卫星作为整个星座的最优主节点
+        best_constellation_master, total_constellation_cost, constellation_connectivity = self._find_best_constellation_master(
+            constellation_satellites, sat_distances
+        )
+        
+        if best_constellation_master is not None:
+            # 已经在_find_best_constellation_master中计算过总代价，直接使用
+            warnings.append(f"[INFO] 星座最优主节点: 卫星{best_constellation_master}, 总代价: {total_constellation_cost:.1f}km, 连通度: {constellation_connectivity}")
+        else:
+            # 如果无法找到合适的主节点，返回失败
+            warnings.append("[WARNING] 无法找到星座最优主节点")
+            total_constellation_cost = float('inf')
 
         # 通信效率评估（按比例扣分）
         cost_penalty = 0
@@ -920,18 +927,18 @@ class ClusterDataValidator:
             efficiency_improvement = (1 - cost_ratio) * 100  # 效率提升百分比
 
             # 按代价比例扣分：代价比例越高，扣分越多
-            if cost_ratio > 0.1:  # 超过10%的星座总代价开始扣分
+            if cost_ratio > 0.1:  # 超过10%的星座最优代价开始扣分
                 # 线性扣分：10%时扣0分，100%时扣满100分
                 cost_penalty = min((cost_ratio - 0.1) / 0.9 * 100, 100)
                 warnings.append(
-                    f"[WARNING] 分了{len(conversation.response.clusters)}个簇后通信代价仍然很高，扣{cost_penalty:.1f}分：当前总通信距离{total_cost:.1f}km，是全星座通信距离的{cost_ratio:.1%}，只节省了{efficiency_improvement:.1f}%的通信成本"
+                    f"[WARNING] 分了{len(conversation.response.clusters)}个簇后通信代价仍然很高，扣{cost_penalty:.1f}分：当前总通信距离{total_cost:.1f}km，是星座最优主节点方案通信距离的{cost_ratio:.1%}，只节省了{efficiency_improvement:.1f}%的通信成本"
                 )
             else:
                 warnings.append(
-                    f"[INFO] 分了{len(conversation.response.clusters)}个簇后通信效率很好，不扣分：当前总通信距离{total_cost:.1f}km，仅占全星座通信距离的{cost_ratio:.1%}，节省了{efficiency_improvement:.1f}%的通信成本"
+                    f"[INFO] 分了{len(conversation.response.clusters)}个簇后通信效率很好，不扣分：当前总通信距离{total_cost:.1f}km，仅占星座最优主节点方案通信距离的{cost_ratio:.1%}，节省了{efficiency_improvement:.1f}%的通信成本"
                 )
         else:
-            warnings.append("[WARNING] 无法计算星座基准代价，跳过效率评估")
+            warnings.append("[WARNING] 无法计算星座最优基准代价或当前不构成观测星座，跳过效率评估")
 
         score_penalty += cost_penalty
 
@@ -959,8 +966,8 @@ class ClusterDataValidator:
 
         summary = (
             f"[SUMMARY] 总代价:{total_cost:.1f}km, 簇内:{total_intra_cluster_cost:.1f}km, "
-            f"全网:{total_inter_cluster_cost:.1f}km, 平均簇内:{avg_cluster_cost:.1f}km, "
-            f"代价比例:{cost_ratio:.1%}, 得分:{final_score}/100"
+            f"分簇后簇间:{total_inter_cluster_cost:.1f}km, 平均簇内:{avg_cluster_cost:.1f}km, "
+            f"vs星座最优:{total_constellation_cost:.1f}km, 代价比例:{cost_ratio:.1%}, 得分:{final_score}/100"
         )
         info_parts.append(summary)
 
@@ -993,7 +1000,6 @@ class ClusterDataValidator:
         # 初始化
         errors = []
         warnings = []
-        info_logs = []
         cluster_stats = []
 
         # 构建目标到观测卫星的映射
@@ -1008,7 +1014,7 @@ class ClusterDataValidator:
             cluster_targets = set(cluster.targets)
 
             if not cluster_targets:
-                info_logs.append(f"[INFO] 簇 {cluster_idx} 无目标，跳过观测效能评估。")
+                warnings.append(f"[INFO] 簇 {cluster_idx} 无目标，跳过观测效能评估。")
                 continue
 
             observation_counts = defaultdict(int)
@@ -1103,8 +1109,6 @@ class ClusterDataValidator:
         
         if warnings:
             info_parts.extend(warnings)
-        if info_logs:
-            info_parts.extend(info_logs)
 
         # 簇详情
         cluster_details_str = []
@@ -1187,6 +1191,60 @@ class ClusterDataValidator:
 
         # 无法到达目标节点
         return None
+
+    def _find_best_constellation_master(
+        self, constellation_satellites, sat_distances: Dict
+    ):
+        """找到整个星座中连通度最高的卫星作为最优主节点
+
+        通过计算每个卫星能够连通到的其他卫星数量（包括多跳连接），
+        选择连通度最高的卫星作为主节点，同时计算总通信代价。
+
+        Args:
+            constellation_satellites: 星座中所有卫星的集合
+            sat_distances: 卫星间距离映射
+
+        Returns:
+            tuple: (最优主节点的ID, 对应的总通信代价, 连通度数量)，如果无法找到则返回(None, 0, 0)
+        """
+        if not constellation_satellites:
+            return None, 0, 0
+
+        best_master = None
+        best_total_cost = 0
+        max_reachable_count = -1
+        total_satellites = len(constellation_satellites) - 1  # 排除自己
+
+        # 尝试每个卫星作为主节点，选择连通度最高的
+        for candidate_master in constellation_satellites:
+            total_cost = 0
+            reachable_count = 0
+
+            # 计算其他所有卫星到这个候选主节点的通信代价
+            for satellite in constellation_satellites:
+                if satellite == candidate_master:
+                    continue
+
+                path_cost = self._find_shortest_path_cost(
+                    satellite, candidate_master, sat_distances, constellation_satellites
+                )
+
+                if path_cost is not None:
+                    total_cost += path_cost
+                    reachable_count += 1
+
+            # 选择连通度最高的卫星作为主节点
+            # 如果连通度相同，选择通信代价最小的
+            if reachable_count > max_reachable_count or (
+                reachable_count == max_reachable_count and 
+                reachable_count > 0 and 
+                (best_master is None or total_cost < best_total_cost)
+            ):
+                max_reachable_count = reachable_count
+                best_total_cost = total_cost
+                best_master = candidate_master
+
+        return best_master, best_total_cost, max_reachable_count
 
     def evaluate_all_results(
         self, validation_results: List[ValidationItem]
@@ -1498,19 +1556,12 @@ class ClusterDataValidator:
 if __name__ == "__main__":
     import sys
     timestamp = get_current_timestamp()
-    
-    # 允许从命令行传入文件名，否则使用默认值
-    if len(sys.argv) > 1:
-        input_file_name = sys.argv[1]
-    else:
-        input_file_name = "clustering_results_cmax_200011_with_history_20250721_215928.jsonl"
-    
-    data_path = get_data_dir() / input_file_name
+    data_path = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_1_with_history.jsonl"
     raw_data: List[LLMConversationMessage] = load_sharegpt_data(data_path)
     validator = ClusterDataValidator()
 
     print("🚀 开始验证卫星分簇结果...")
-    validation_results = validator.validate_output(raw_data)
+    validation_results: List[ValidationItem] = validator.validate_output(raw_data)
 
     print("📊 生成详细统计报告...")
     evaluation_result = validator.evaluate_all_results(validation_results)
@@ -1521,7 +1572,7 @@ if __name__ == "__main__":
     # 保存验证结果
     output_file = (
         get_data_dir()
-        / f"{input_file_name}_validation_result_{timestamp}.jsonl"
+        / f"cluster_results_sharegpt_training_data/{data_path.stem}_validation_result_{timestamp}.jsonl"
     )
     with open(output_file, "w", encoding="utf-8") as f:
         for item in validation_results:
@@ -1531,7 +1582,7 @@ if __name__ == "__main__":
             )
 
     # 保存统计结果
-    stats_file = get_data_dir() / f"{input_file_name}_validation_stats_{timestamp}.json"
+    stats_file = get_data_dir() / f"cluster_results_sharegpt_training_data/{data_path.stem}_validation_stats_{timestamp}.json"
     with open(stats_file, "w", encoding="utf-8") as f:
         json.dump(evaluation_result, f, ensure_ascii=False, indent=2)
 

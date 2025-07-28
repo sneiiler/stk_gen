@@ -46,8 +46,8 @@ env_path = get_project_root() / ".env"
 load_dotenv(env_path)
 
 # 获取Gemini API配置
-api_base_gemini = os.getenv("DASHSCOPE_API_BASE")
-api_key_gemini = os.getenv("DASHSCOPE_API_KEY")
+api_base_gemini = os.getenv("QWEN_API_BASE")
+api_key_gemini = os.getenv("QWEN_API_KEY")
 
 print(f"API配置: {'✓' if api_key_gemini and api_base_gemini else '✗'}")
 
