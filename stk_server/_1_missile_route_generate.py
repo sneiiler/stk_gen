@@ -59,6 +59,30 @@ launch_bases = [
     (35.2338, 129.0825),  # Busan Naval Base, South Korea
     (21.4526, -158.0393),  # Schofield Barracks, USA (Hawaii)
     (51.8836, -176.6364),  # Eareckson Air Station (Aleutians), USA
+    # Evil additions: Southern Hemisphere launch bases for equatorial and polar barrages
+    (-12.4634, 130.8456),  # Darwin RAAF Base, Australia
+    (-23.7990, 133.7370),  # Pine Gap (joint US-AUS facility), Australia
+    (-25.8299, 28.2225),  # AFB Waterkloof, South Africa
+    (-2.3178, -44.3964),  # Alcântara Launch Center, Brazil
+    (-41.2924, 174.7787),  # Wellington Military Base, New Zealand
+    (-53.1638, -70.9171),  # Punta Arenas Air Base, Chile
+    (-6.2088, 106.8456),  # Halim Perdanakusuma Air Base, Indonesia (Jakarta)
+    (-32.7986, 26.8820),  # Grahamstown (hypothetical SA missile site), South Africa
+    (-15.7939, -47.8828),  # Brasilia Air Base, Brazil
+    (-34.6037, -58.3816),  # Buenos Aires Naval Base, Argentina
+    (-42.8864, 147.2120),  # Hobart (Tasmanian defense site), Australia
+    (-18.7760, 146.8680),  # Townsville RAAF Base, Australia
+    (12.5657, 104.8442),  # Phnom Penh (Southeast Asian proxy, near equator), Cambodia
+    (
+        -21.2200,
+        55.5184,
+    ),  # Roland Garros Airport (military use), Réunion (French territory)
+    (
+        -77.8889,
+        166.6667,
+    ),  # McMurdo Station (Antarctic research, fictional missile site), Antarctica
+    (-13.1639, -72.5450),  # Cusco (Peruvian highlands, strategic), Peru
+    (-4.4419, 15.2663),  # Kinshasa Military Base, DR Congo
 ]
 
 # Define target cities (latitude, longitude) - Bloated with more targets, including extra Chinese strategic sites
@@ -153,7 +177,10 @@ target_cities = [
     (19.0760, 72.8777),  # Mumbai, India
     (35.6892, 51.3890),  # Tehran (duplicate for emphasis? No, refined), Iran
     (37.7749, -122.4194),  # San Francisco, USA
-    (51.1789, -1.8262),  # London (alternate? Wait, adding Liverpool instead: 53.4084, -2.9916) Liverpool, UK
+    (
+        51.1789,
+        -1.8262,
+    ),  # LondonF
     (53.4084, -2.9916),  # Liverpool, UK
     (35.2271, -80.8431),  # Charlotte, USA (financial hub)
     (25.7617, -80.1918),  # Miami, USA
@@ -165,15 +192,44 @@ target_cities = [
     (4.7109, -74.0721),  # Bogota, Colombia
     (9.9281, -84.0907),  # San Jose, Costa Rica
     (18.4655, -66.1057),  # San Juan, Puerto Rico
-    (64.1265, -21.8174),  # Reykjavik (duplicate? Adding Akureyri: 65.6885, -18.1262) Akureyri, Iceland
+    (
+        64.1265,
+        -21.8174,
+    ),  # Reykjavik
     (65.6885, -18.1262),  # Akureyri, Iceland
+    (-37.8136, 144.9631),  # Melbourne, Australia
+    (-27.4698, 153.0251),  # Brisbane, Australia
+    (-31.9505, 115.8605),  # Perth, Australia
+    (-22.9068, -43.1729),  # Rio de Janeiro, Brazil
+    (-33.4489, -70.6693),  # Santiago, Chile
+    (-34.9011, -56.1915),  # Montevideo, Uruguay
+    (-12.0464, -77.0428),  # Lima, Peru
+    (-25.2637, -57.5759),  # Asunción, Paraguay
+    (-16.5000, -68.1500),  # La Paz, Bolivia
+    (4.7109, -74.0721),  # Bogotá, Colombia
+    (-0.1807, -78.4678),  # Quito, Ecuador
+    (-33.9249, 18.4241),  # Cape Town, South Africa
+    (-29.8587, 31.0218),  # Durban, South Africa
+    (-6.7924, 39.2083),  # Dar es Salaam, Tanzania
+    (-1.2921, 36.8219),  # Nairobi, Kenya
+    (-18.8792, 47.5079),  # Antananarivo, Madagascar
+    (-41.2865, 174.7762),  # Wellington, New Zealand
+    (-36.8485, 174.7633),  # Auckland, New Zealand
+    (-17.7134, 178.0650),  # Suva, Fiji
+    (-9.4438, 147.1803),  # Port Moresby, Papua New Guinea
+    (-77.8889, 166.6667),  # McMurdo Station (Antarctic target), Antarctica
+    (-54.8054, -68.3114),  # Ushuaia, Argentina (southernmost city)
+    (15.5000, -90.2500),  # Guatemala City, Guatemala (Central American addition)
+    (18.4655, -66.1057),  # San Juan, Puerto Rico (Caribbean)
 ]
 
 # Generate 25 unique routes (base-target pairs) for volleys
 num_routes = 40
 routes = []
 used_pairs = set()  # To ensure uniqueness
-min_distance_threshold = 1000  # km, filter out routes unsuitable for long-range missiles
+min_distance_threshold = (
+    1000  # km, filter out routes unsuitable for long-range missiles
+)
 while len(routes) < num_routes:
     base = random.choice(launch_bases)
     target = random.choice(target_cities)
@@ -183,11 +239,13 @@ while len(routes) < num_routes:
         p1 = {"latitude": base[0], "longitude": base[1]}
         p2 = {"latitude": target[0], "longitude": target[1]}
         distance = haversine_distance(p1, p2)
-        if distance >= min_distance_threshold:  # Only add if suitable for long-range attack
+        if (
+            distance >= min_distance_threshold
+        ):  # Only add if suitable for long-range attack
             used_pairs.add(pair)
             routes.append((base, target, distance))  # Store distance for later use
 
-# Distribute missiles across the routes (random 5-10 per route, no upper limit on total)
+# Distribute missiles across the routes (random 1-2 per route, no upper limit on total)
 missiles_per_route = [random.randint(1, 2) for _ in range(num_routes)]
 total_missiles = sum(missiles_per_route)  # This will be >50, typically 125-250
 
@@ -204,17 +262,20 @@ for route_idx, (base, target, distance) in enumerate(routes):
         current_time += time_interval
         # Calculate reasonable altitude based on distance (in km, with ±10% variation)
         base_altitude = min(0.12 * distance, 1500.0)  # Cap altitude at 2500 km
-        altitude = min(round(base_altitude * random.uniform(0.9, 1.1), 2),
-                       1500.0)  # Ensure altitude does not exceed 2500 km
+        altitude = min(
+            round(base_altitude * random.uniform(0.9, 1.1), 2), 1500.0
+        )  # Ensure altitude does not exceed 2500 km
         entry = {
             "name": f"m{route_idx + 1}n{missile_id}",
             "trajectory_epoch_second": current_time,
             "speed": round(random.uniform(3.0, 10.0), 2),  # Random speed
             "altitude": altitude,  # Updated: based on distance
-            "latitude": round(base[0] + random.uniform(-0.05, 0.05), 6),  # Slight perturbation
+            "latitude": round(
+                base[0] + random.uniform(-0.05, 0.05), 6
+            ),  # Slight perturbation
             "longitude": round(base[1] + random.uniform(-0.05, 0.05), 6),
             "impact_latitude": round(target[0] + random.uniform(-0.05, 0.05), 6),
-            "impact_longitude": round(target[1] + random.uniform(-0.05, 0.05), 6)
+            "impact_longitude": round(target[1] + random.uniform(-0.05, 0.05), 6),
         }
         data.append(entry)
         missile_id += 1
@@ -229,7 +290,9 @@ print(f"Total launch duration: {current_time} seconds (~{current_time // 60} min
 # print(json.dumps(data, indent=2, ensure_ascii=False))
 current_timestamp = get_current_timestamp()
 # Create output directory if it doesn't exist
-output_dir = get_data_dir() / f"stk_route_data/missile_route_info_v{current_timestamp}.json"
+output_dir = (
+    get_data_dir() / f"stk_route_data/missile_route_info_v{current_timestamp}.json"
+)
 
 # Save the data to a JSON file
 with open(output_dir, "w") as json_file:
