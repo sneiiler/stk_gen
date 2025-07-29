@@ -182,3 +182,4 @@ stk_mcp_server/pyproject.toml
 documents/temp/*
 !documents/temp/.gitkeep
 .DS_Store
+stk_server/Scenario/

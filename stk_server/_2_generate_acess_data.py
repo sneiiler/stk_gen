@@ -94,6 +94,10 @@ def visualize_satellites_mutual_access(
 
     # 保存或显示图片
     if output_file:
+        # 确保目录存在
+        output_dir = os.path.dirname(output_file)
+        os.makedirs(output_dir, exist_ok=True)
+        
         plt.savefig(output_file, dpi=300, bbox_inches="tight")
         # plt.show()
         plt.close()
@@ -175,6 +179,10 @@ def visualize_satellites_to_targets_access(
 
     # 保存或显示图形
     if output_file:
+        # 确保目录存在
+        output_dir = os.path.dirname(output_file)
+        os.makedirs(output_dir, exist_ok=True)
+        
         plt.savefig(output_file, dpi=300, bbox_inches="tight")
         # plt.show()
         plt.close()
@@ -475,6 +483,14 @@ def generate_satellite_target_visibility_data(
             # 实时保存到文件
             if output_file:
                 try:
+                    # 确保输出目录存在
+                    output_dir = os.path.dirname(output_file)
+                    os.makedirs(output_dir, exist_ok=True)
+                    
+                    # 确保备份目录存在
+                    backup_dir = os.path.dirname(backup_file)
+                    os.makedirs(backup_dir, exist_ok=True)
+                    
                     # 先保存到备份文件
                     with open(backup_file, "w", encoding="utf-8") as f:
                         # 将BaseModel对象转换为字典再序列化
@@ -499,7 +515,7 @@ def generate_satellite_target_visibility_data(
 if __name__ == "__main__":
 
     # 读取路线图并转为 MissileInfo 对象
-    scenario_index=3
+    scenario_index=5
     with open(
         get_data_dir() / f"stk_route_data/missile_route_info_scenario_{scenario_index}.json",
         "r",
@@ -519,15 +535,15 @@ if __name__ == "__main__":
     timestamp = get_current_timestamp()
     # png_filename = (
     #     get_data_dir()
-    #     / f"stk_access_data/satellites_mutual_access_scenario_{scenario_index}_{timestamp}.png"
+    #     / f"stk_access_result_data/satellites_mutual_access_scenario_{scenario_index}_{timestamp}.png"
     # )
     targets_png_filename = (
         get_data_dir()
-        / f"stk_access_data/satellite_target_visibility_data_scenario_{scenario_index}_{timestamp}.png"
+        / f"stk_access_result_data/satellite_target_visibility_data_scenario_{scenario_index}_{timestamp}.png"
     )
     json_output_filename = (
         get_data_dir()
-        / f"stk_access_data/satellite_target_visibility_data_scenario_{scenario_index}_{timestamp}.json"
+        / f"stk_access_result_data/satellite_target_visibility_data_scenario_{scenario_index}_{timestamp}.json"
     )
 
     # 生成并保存卫星互可见性热力图
