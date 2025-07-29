@@ -1,0 +1,12 @@
+# 依赖库安装要求
+# 请使用以下命令安装依赖：
+# pip install -r requirements.txt
+
+# 必需的核心依赖
+pydantic>=2.0.0
+langchain>=0.1.0
+openai>=1.0.0
+tqdm>=4.65.0
+
+# 可选的HTTP代理支持
+httpx>=0.24.0
