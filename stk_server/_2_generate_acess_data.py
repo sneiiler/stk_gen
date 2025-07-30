@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from icecream import install
+# from icecream import install
 from tqdm import tqdm
 
 from data_classes.observation_target_models import (
@@ -22,7 +22,6 @@ from data_classes.visibility_data_models import (
 from stk_server.Packages import STKConnector, Tools
 from utils.misc_utils import get_current_timestamp, get_data_dir
 
-install()
 stk_conn = STKConnector.STKConnector()
 
 
@@ -315,41 +314,81 @@ def generate_satellite_target_visibility_data(
     result = []
 
     # 如果指定了输出文件，初始化文件
+    start_index = 0
     if output_file:
         # 如果文件已存在，先读取已有数据
         if os.path.exists(output_file):
             try:
                 with open(output_file, "r", encoding="utf-8") as f:
-                    result = json.load(f)
-                print(f"从现有文件加载了 {len(result)} 条记录")
+                    existing_data = json.load(f)
+                    result = existing_data
+                    start_index = len(result)
+                print(f"从现有文件加载了 {len(result)} 条记录，将从索引 {start_index} 开始")
             except:
                 result = []
-
-        # 创建备份文件名
-        backup_file = str(output_file).replace(".json", "_backup.json")
+                start_index = 0
 
     processed_count = 0
+    
+    # 批量写入配置
+    BATCH_SIZE = 1000  # 每100条记录写入一次
+    batch_buffer = []
+    
+    # 预计算所有时间点的坐标数据以减少STK调用
+    print("预计算坐标数据...")
+    all_satellite_coords = {}
+    all_missile_coords = {}
+    
+    # 批量获取所有卫星在所有时间点的坐标
+    for sat_id in sorted(all_sats):
+        sat_coords = stk_conn.get_satellite_ecef_by_time_shift(
+            start_time_shift=start_sample_time,
+            period=end_sample_time - start_sample_time,
+            step=step,
+            ret_single_point=False,
+            instance_names=[sat_id]
+        )
+        all_satellite_coords[sat_id] = {}
+        if sat_id in sat_coords:
+            for coord_data in sat_coords[sat_id]:
+                if len(coord_data) >= 4:
+                    # 将时间字符串转换为相对于场景开始时间的偏移量
+                    time_offset = int(Tools.get_ms_timestamp_by_date_string(coord_data[0]) - scenario_begin_ts)
+                    all_satellite_coords[sat_id][time_offset] = coord_data[1:4]
+    
+    # 批量获取所有导弹在所有时间点的坐标
+    for tgt_id in sorted(all_targets):
+        missile_coords = stk_conn.get_missile_ecef_by_time_shift(
+            start_time_shift=start_sample_time,
+            period=end_sample_time - start_sample_time,
+            step=step,
+            ret_single_point=False,
+            instance_names=[tgt_id]
+        )
+        all_missile_coords[tgt_id] = {}
+        if tgt_id in missile_coords:
+            for coord_data in missile_coords[tgt_id]:
+                if len(coord_data) >= 4:
+                    # 将时间字符串转换为相对于场景开始时间的偏移量
+                    time_offset = int(Tools.get_ms_timestamp_by_date_string(coord_data[0]) - scenario_begin_ts)
+                    all_missile_coords[tgt_id][time_offset] = coord_data[1:4]
     for sat_id in tqdm(sorted(all_sats), desc="Processing satellites"):
         if sat_id not in visibility_dict:
             continue
 
-        for t_offset in tqdm(sample_time_points, desc="Processing time offsets"):
+        for t_offset in tqdm(sample_time_points, desc="Processing time offsets", leave=False):
+            # 检查是否已经处理过这个数据点（基于已有数据的索引）
+            current_index = len(result) + len(batch_buffer)
+            if current_index < start_index:
+                continue
+                
             # 统计此刻可见的所有目标
             target_visibility = []
             for tgt_id, intervals in visibility_dict[sat_id].items():
                 for t0, t1, duration in intervals:
                     if t0 <= t_offset <= t1:
-                        # 获取目标坐标 - 指定特定的导弹实例
-                        missile_ecef_data = stk_conn.get_missile_ecef_by_time_shift(
-                            start_time_shift=t_offset,
-                            period=10,
-                            step=1,
-                            ret_single_point=True,
-                            instance_names=[tgt_id],  # 只获取当前目标的坐标
-                        )
-                        tgt_ecef = missile_ecef_data.get(
-                            tgt_id, [[None, None, None, None]]
-                        )[0][1:]
+                        # 从预计算的坐标数据中获取目标坐标
+                        tgt_ecef = all_missile_coords.get(tgt_id, {}).get(t_offset, [0.0, 0.0, 0.0])
 
                         # 确保位置数据是有效的浮点数列表
                         if tgt_ecef and all(x is not None for x in tgt_ecef):
@@ -373,21 +412,12 @@ def generate_satellite_target_visibility_data(
                         )
                         break  # 一个目标只加一次
 
-            # 如果该卫星在此时刻没有可见目标和可见卫星，跳过
+            # 如果该卫星在此时刻没有可见目标，跳过
             if not target_visibility:
                 continue
 
-            # 获取卫星坐标 - 指定特定的卫星实例
-            satellite_ecef_data = stk_conn.get_satellite_ecef_by_time_shift(
-                start_time_shift=t_offset,
-                period=10,
-                step=1,
-                ret_single_point=True,
-                instance_names=[sat_id],  # 只获取当前卫星的坐标
-            )
-            sat_ecef = satellite_ecef_data.get(sat_id, [[None, None, None, None]])[0][
-                1:
-            ]
+            # 从预计算的坐标数据中获取卫星坐标
+            sat_ecef = all_satellite_coords.get(sat_id, {}).get(t_offset, [0.0, 0.0, 0.0])
 
             # 统计此刻可见的所有卫星
             inter_satellite_connectivity = []
@@ -395,19 +425,8 @@ def generate_satellite_target_visibility_data(
                 for other_sat_id, intervals in sat_sat_visibility_dict[sat_id].items():
                     for t0, t1, duration in intervals:
                         if t0 <= t_offset <= t1:
-                            # 获取其他卫星的坐标
-                            other_sat_ecef_data = (
-                                stk_conn.get_satellite_ecef_by_time_shift(
-                                    start_time_shift=t_offset,
-                                    period=10,
-                                    step=1,
-                                    ret_single_point=True,
-                                    instance_names=[other_sat_id],
-                                )
-                            )
-                            other_sat_ecef = other_sat_ecef_data.get(
-                                other_sat_id, [[None, None, None, None]]
-                            )[0][1:]
+                            # 从预计算的坐标数据中获取其他卫星的坐标
+                            other_sat_ecef = all_satellite_coords.get(other_sat_id, {}).get(t_offset, [0.0, 0.0, 0.0])
 
                             # 计算连接质量（基于距离的归一化值）
                             # 这里使用一个简单的示例：假设最大距离为10000km，最小距离为100km
@@ -477,34 +496,50 @@ def generate_satellite_target_visibility_data(
                 ),
                 time_offset_from_scenario_start=t_offset,
             )
-            result.append(data)
+            batch_buffer.append(data)
             processed_count += 1
 
-            # 实时保存到文件
-            if output_file:
+            # 批量写入文件
+            if output_file and len(batch_buffer) >= BATCH_SIZE:
                 try:
+                    # 将缓冲区数据添加到结果中
+                    result.extend(batch_buffer)
+                    batch_buffer = []
+                    
                     # 确保输出目录存在
                     output_dir = os.path.dirname(output_file)
                     os.makedirs(output_dir, exist_ok=True)
                     
-                    # 确保备份目录存在
-                    backup_dir = os.path.dirname(backup_file)
-                    os.makedirs(backup_dir, exist_ok=True)
-                    
-                    # 先保存到备份文件
-                    with open(backup_file, "w", encoding="utf-8") as f:
+                    # 写入文件
+                    with open(output_file, "w", encoding="utf-8") as f:
                         # 将BaseModel对象转换为字典再序列化
                         result_dicts = [item.model_dump() for item in result]
                         json.dump(result_dicts, f, ensure_ascii=False, indent=2)
-
-                    # 备份成功后，重命名为正式文件
-                    if os.path.exists(backup_file):
-                        if os.path.exists(output_file):
-                            os.remove(output_file)
-                        os.rename(backup_file, output_file)
+                    
+                    print(f"已保存 {len(result)} 条记录到文件")
 
                 except Exception as e:
                     print(f"保存文件时出错: {e}")
+    
+    # 处理剩余的批量数据
+    if batch_buffer:
+        result.extend(batch_buffer)
+        
+        # 最终保存到文件
+        if output_file:
+            try:
+                # 确保输出目录存在
+                output_dir = os.path.dirname(output_file)
+                os.makedirs(output_dir, exist_ok=True)
+                
+                # 写入文件
+                with open(output_file, "w", encoding="utf-8") as f:
+                    # 将BaseModel对象转换为字典再序列化
+                    result_dicts = [item.model_dump() for item in result]
+                    json.dump(result_dicts, f, ensure_ascii=False, indent=2)
+
+            except Exception as e:
+                print(f"保存文件时出错: {e}")
 
     print(f"生成的数据点数量: {len(result)}")
     if output_file:
@@ -523,6 +558,7 @@ if __name__ == "__main__":
     ) as f:
         missile_data_loaded = json.load(f)
     missile_list = [MissileInfo(**item) for item in missile_data_loaded]
+    scenario_index="5_1s"
 
     # missile_list=missile_list[:2]
 
@@ -533,6 +569,7 @@ if __name__ == "__main__":
 
     # 生成带时间戳的文件名
     timestamp = get_current_timestamp()
+    timestamp = "20250729_231834"
     # png_filename = (
     #     get_data_dir()
     #     / f"stk_access_result_data/satellites_mutual_access_scenario_{scenario_index}_{timestamp}.png"
@@ -564,7 +601,7 @@ if __name__ == "__main__":
         satellites_to_targets_access=satellites_to_missiles_access,
         satellites_mutual_access=satellites_mutual_access,
         scenario_begin_time=stk_conn.scenario_begin_time,
-        step=10,
+        step=1,
         output_file=json_output_filename,  # 实时保存到文件
     )
     print(f"结构化卫星-目标可见性数据已保存到: {json_output_filename}")
