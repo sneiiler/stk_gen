@@ -331,7 +331,7 @@ def generate_satellite_target_visibility_data(
     processed_count = 0
     
     # 批量写入配置
-    BATCH_SIZE = 1000  # 每100条记录写入一次
+    BATCH_SIZE = 10000  # 每100条记录写入一次
     batch_buffer = []
     
     # 预计算所有时间点的坐标数据以减少STK调用
@@ -550,7 +550,7 @@ def generate_satellite_target_visibility_data(
 if __name__ == "__main__":
 
     # 读取路线图并转为 MissileInfo 对象
-    scenario_index=5
+    scenario_index=12
     with open(
         get_data_dir() / f"stk_route_data/missile_route_info_scenario_{scenario_index}.json",
         "r",
@@ -558,7 +558,7 @@ if __name__ == "__main__":
     ) as f:
         missile_data_loaded = json.load(f)
     missile_list = [MissileInfo(**item) for item in missile_data_loaded]
-    scenario_index="5_1s"
+    # scenario_index="5_1s"
 
     # missile_list=missile_list[:2]
 
@@ -569,7 +569,7 @@ if __name__ == "__main__":
 
     # 生成带时间戳的文件名
     timestamp = get_current_timestamp()
-    timestamp = "20250729_231834"
+    # timestamp = "20250729_231834"
     # png_filename = (
     #     get_data_dir()
     #     / f"stk_access_result_data/satellites_mutual_access_scenario_{scenario_index}_{timestamp}.png"
@@ -601,7 +601,7 @@ if __name__ == "__main__":
         satellites_to_targets_access=satellites_to_missiles_access,
         satellites_mutual_access=satellites_mutual_access,
         scenario_begin_time=stk_conn.scenario_begin_time,
-        step=1,
+        step=10,
         output_file=json_output_filename,  # 实时保存到文件
     )
     print(f"结构化卫星-目标可见性数据已保存到: {json_output_filename}")
