@@ -4,7 +4,7 @@
 """
 
 import json
-from data_classes.sft_data_models import SatelliteClusterOutput, ClusterInfo
+from data_class.sft_data_models import SatelliteClusterOutput, ClusterInfo
 from langchain.output_parsers import PydanticOutputParser
 
 def test_parser():

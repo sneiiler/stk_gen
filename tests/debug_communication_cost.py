@@ -11,7 +11,7 @@ from pathlib import Path
 root_dir = Path(__file__).parent
 sys.path.append(str(root_dir))
 
-from data_classes.sft_data_models import (
+from data_class.sft_data_models import (
     LLMConversationMessage,
     RawConstellationDataModel,
     SatelliteClusterOutput,

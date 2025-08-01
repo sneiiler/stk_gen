@@ -6,7 +6,7 @@
 from typing import List, Literal
 from pydantic import BaseModel, Field
 
-from data_classes.sft_data_models import ClusterInfo, RawConstellationDataModel
+from data_class.sft_data_models import ClusterInfo, RawConstellationDataModel
 
 
 class ValidationDetail(BaseModel):

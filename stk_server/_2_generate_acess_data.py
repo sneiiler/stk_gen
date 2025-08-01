@@ -10,10 +10,10 @@ import seaborn as sns
 from icecream import install
 from tqdm import tqdm
 
-from data_classes.observation_target_models import (
+from data_class.observation_target_models import (
     MissileInfo,
 )
-from data_classes.visibility_data_models import (
+from data_class.visibility_data_models import (
     SatelliteInfo,
     TargetVisibility,
     InterSatelliteConnectivity,

@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from misc_tools.sharegpt_utils import create_sharegpt_format
 from utils.misc_utils import get_data_dir
-from data_classes.sft_data_models import ClusterInfo, SatelliteClusterOutput, LLMConversationMessage, RawConstellationDataModel, SatelliteAttributes, SatelliteEdge, TargetEdge
+from data_class.sft_data_models import ClusterInfo, SatelliteClusterOutput, LLMConversationMessage, RawConstellationDataModel, SatelliteAttributes, SatelliteEdge, TargetEdge
 
 
 def convert_time_slice_to_model(time_slice: dict) -> RawConstellationDataModel:
@@ -67,7 +67,8 @@ def convert_time_slice_to_model(time_slice: dict) -> RawConstellationDataModel:
     sat_attrs = []
     satellites = time_slice.get("satellites", [])
     for sat in satellites:
-        sat_id = int(sat["id"].replace("Satellite", "")) if "Satellite" in sat["id"] else int(sat["id"])
+        # 保持原始字符串格式，不进行数字转换
+        sat_id = sat["id"]  # 直接使用原始字符串ID
         sat_attrs.append(SatelliteAttributes(
             id=sat_id,
             health=sat.get("health", 10.0),  # 默认健康状态为10
@@ -655,9 +656,24 @@ class SatelliteClusteringAlgorithm:
         target_to_satellites = defaultdict(set)
         print(f"🔍 收集目标-卫星可见性关系，共 {len(sat_target_vis)} 条记录")
         
+        # 调试信息：检查格式一致性
+        sample_sat_ids = sat_ids[:5] if len(sat_ids) >= 5 else sat_ids
+        sample_vis_keys = list(sat_target_vis.keys())[:5]
+        print(f"🔍 调试：sat_ids 前{len(sample_sat_ids)}个: {sample_sat_ids}")
+        print(f"🔍 调试：sat_target_vis 前{len(sample_vis_keys)}个键: {sample_vis_keys}")
+        
+        matched_count = 0
+        unmatched_sats = set()
+        
         for (s_id, t_id), quality in sat_target_vis.items():
-            # 直接使用字符串格式的卫星ID进行匹配，不进行数字转换
-            sat_idx = sat_ids.index(s_id) if s_id in sat_ids else -1
+            # 确保使用完全相同的字符串格式进行匹配
+            sat_idx = -1
+            if s_id in sat_ids:
+                sat_idx = sat_ids.index(s_id)
+                matched_count += 1
+            else:
+                unmatched_sats.add(s_id)
+            
             if sat_idx >= 0:
                 # 找到卫星所属的簇（在合并后的簇中）
                 cluster_root = None
@@ -667,6 +683,10 @@ class SatelliteClusteringAlgorithm:
                         break
                 if cluster_root is not None:
                     target_to_satellites[t_id].add(cluster_root)
+        
+        print(f"🔍 调试：匹配到的卫星记录数: {matched_count}")
+        if unmatched_sats:
+            print(f"🔍 调试：未匹配的卫星ID: {list(unmatched_sats)[:10]}")  # 只显示前10个
         
         print(f"🎯 发现 {len(target_to_satellites)} 个目标可被观测")
 
@@ -1257,8 +1277,14 @@ def load_data(file_path: Path) -> List[RawConstellationDataModel]:
             # 解析satellite attributes
             sat_attrs = []
             for sat in record.get("sat_attrs", []):
+                # 确保卫星ID使用原始字符串格式
+                sat_id = sat["id"]
+                if isinstance(sat_id, int):
+                    # 如果是数字，转换为 "SatelliteXXX" 格式
+                    sat_id = f"Satellite{sat_id}"
+                
                 sat_attrs.append(SatelliteAttributes(
-                    id=sat["id"],
+                    id=sat_id,
                     health=sat["health"],
                     pos=sat["pos"]
                 ))
@@ -1295,7 +1321,7 @@ def load_data(file_path: Path) -> List[RawConstellationDataModel]:
 # 示例使用
 if __name__ == "__main__":
     # 加载数据
-    data_file = get_data_dir() / "stk_access_result_data/raw_constellation_data_scenario_1.jsonl"
+    data_file = get_data_dir() / "stk_access_result_data/raw_constellation_data_scenario_6.jsonl"
 
     if not data_file.exists():
         print("数据文件不存在，请检查路径...")

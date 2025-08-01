@@ -288,7 +288,7 @@ def validate_converted_data(file_path: Path, sample_size: int = 5) -> None:
         print("🔍 尝试 Pydantic 模型验证...")
         try:
             from misc_tools.sharegpt_utils import load_sharegpt_data
-            from data_classes.sft_data_models import LLMConversationMessage
+            from data_class.sft_data_models import LLMConversationMessage
             
             # 创建临时文件进行验证
             temp_file = file_path.parent / f"temp_validation_{get_current_timestamp()}.jsonl"

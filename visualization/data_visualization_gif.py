@@ -11,7 +11,7 @@ from PIL import Image
 from matplotlib.font_manager import FontProperties
 from tqdm import tqdm
 
-from data_classes.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput
+from data_class.sft_data_models import ClusterInfo, SatelliteClusterClearOutput, SatelliteClusterOutput
 
 # 设置matplotlib支持中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans']

@@ -20,16 +20,16 @@ import win32com.client
 from typing import List, Dict, Tuple
 from icecream import ic
 
-from data_classes.observation_target_models import (
+from data_class.observation_target_models import (
     ObservationTargetInfo,
     RevisitAnalysisConstraints,
     RevisitAnalysisInfo,
     STKAccessEvent,
     MissileInfo,
 )
-from data_classes.payload_models import PayloadInfo
+from data_class.payload_models import PayloadInfo
 
-from data_classes.satellite_models import (
+from data_class.satellite_models import (
     SatelliteInfo
 )
 

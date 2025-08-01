@@ -6,8 +6,8 @@
 from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field
 
-from data_classes.payload_models import PayloadInfo
-from data_classes.constraint_models import OrbitDesignConstraints, UserRequirements
+from data_class.payload_models import PayloadInfo
+from data_class.constraint_models import OrbitDesignConstraints, UserRequirements
 
 
 class OrbitalElementsInfo(BaseModel):

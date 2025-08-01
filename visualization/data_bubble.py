@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from utils.misc_utils import get_data_dir, get_project_root, get_current_timestamp
 from misc_tools.sharegpt_utils import load_sharegpt_data
-from data_classes.sft_data_models import LLMConversationMessage
+from data_class.sft_data_models import LLMConversationMessage
 
-from data_classes.data_validation_models import ValidationItem
+from data_class.data_validation_models import ValidationItem
 
 
 class ClusterDataValidator:
@@ -119,7 +119,7 @@ class ClusterDataValidator:
                 coverage_rate = 1.0  # 如果没有输入目标，认为覆盖率为100%
 
             # 创建验证详情
-            from data_classes.data_validation_models import ValidationDetail
+            from data_class.data_validation_models import ValidationDetail
             result[index].validation_details.append(ValidationDetail(
                 validation_type="correctness_validation",
                 score=0,

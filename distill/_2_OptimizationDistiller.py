@@ -27,12 +27,12 @@ from tqdm import tqdm
 root_dir = Path(__file__).parent.parent
 sys.path.append(str(root_dir))
 
-from data_classes.sft_data_models import (
+from data_class.sft_data_models import (
     ClusterOptimizationOutput,
     ShareGPTFormat,
     ShareGPTMessage,
 )
-from data_classes.data_validation_models import ValidationItem
+from data_class.data_validation_models import ValidationItem
 from utils.misc_utils import get_current_timestamp, get_data_dir, get_project_root
 from utils.prompt_template import get_cluster_optimization_prompt
 

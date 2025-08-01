@@ -7,7 +7,7 @@ optimization system, specifically for dynamic satellite cluster partitioning.
 
 from pydantic import BaseModel, Field
 from typing import List
-from data_classes.sft_data_models import RawConstellationDataModel, SatelliteClusterOutput
+from data_class.sft_data_models import RawConstellationDataModel, SatelliteClusterOutput
 
 # Version 1.0 - Initial satellite cluster optimization prompt
 SATELLITE_CLUSTER_V1 = """

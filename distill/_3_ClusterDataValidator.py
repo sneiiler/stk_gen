@@ -18,8 +18,8 @@ from icecream import ic
 from tqdm import tqdm
 from utils.misc_utils import get_current_timestamp, get_data_dir
 from misc_tools.sharegpt_utils import load_sharegpt_data
-from data_classes.sft_data_models import LLMConversationMessage
-from data_classes.data_validation_models import ValidationItem, ValidationDetail
+from data_class.sft_data_models import LLMConversationMessage
+from data_class.data_validation_models import ValidationItem, ValidationDetail
 
 
 class ClusterDataValidator:
@@ -1556,7 +1556,7 @@ class ClusterDataValidator:
 if __name__ == "__main__":
     import sys
     timestamp = get_current_timestamp()
-    data_path = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_1_with_history.jsonl"
+    data_path = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_5_with_history.jsonl"
     raw_data: List[LLMConversationMessage] = load_sharegpt_data(data_path)
     validator = ClusterDataValidator()
 

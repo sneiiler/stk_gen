@@ -33,7 +33,7 @@ install()
 from utils.misc_utils import get_data_dir, get_project_root
 from utils.prompt_template import get_prompt_template
 from misc_tools.sharegpt_utils import create_sharegpt_format
-from data_classes.sft_data_models import (
+from data_class.sft_data_models import (
     ClusterInfo,
     RawConstellationDataModel,
     SatelliteClusterOutput,

@@ -13,8 +13,8 @@ from typing import List, Dict, Union, Tuple, Any, Optional
 
 from utils.misc_utils import get_data_dir, get_project_root
 
-chat_tokenizer_dir = get_project_root() / "data_classes/tokenizers/deepseek/"
-qwen_chat_tokenizer_dir = get_project_root() / "data_classes/tokenizers/qwen/"
+chat_tokenizer_dir = get_project_root() / "data_class/tokenizers/deepseek/"
+qwen_chat_tokenizer_dir = get_project_root() / "data_class/tokenizers/qwen/"
 
 
 class TokenCalculator:

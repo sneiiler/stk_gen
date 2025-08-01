@@ -11,7 +11,7 @@ import numpy as np
 root_dir = Path(__file__).parent.parent
 sys.path.append(str(root_dir))
 
-from data_classes.sft_data_models import TargetEdge, SatelliteEdge, RawConstellationDataModel
+from data_class.sft_data_models import TargetEdge, SatelliteEdge, RawConstellationDataModel
 from stk_server.Packages.Tools import ecef_distance
 from utils.misc_utils import get_data_dir
 
@@ -237,9 +237,9 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
 
 def main():
     # 读取输入文件
-    scenario_index = 3
+    scenario_index = 6
     with open(
-            get_data_dir() / f"stk_access_result_data/satellite_target_visibility_data_scenario_{scenario_index}_20250722_204803.json",
+            get_data_dir() / f"stk_access_result_data/satellite_target_visibility_data_scenario_{scenario_index}.json",
             "r") as f:
         input_data = json.load(f)
 
@@ -248,7 +248,7 @@ def main():
 
     # 获取当前时间戳
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = get_data_dir() / f"stk_access_result_data/raw_constellation_data_scenario_{scenario_index}_{timestamp}.jsonl"
+    output_file = get_data_dir() / f"stk_access_result_data/raw_constellation_data_scenario_{scenario_index}.jsonl"
 
     # 写入输出文件
     with open(output_file, "w", encoding="utf-8") as f:

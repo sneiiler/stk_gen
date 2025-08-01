@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 from typing import List
-from data_classes.sft_data_models import RawConstellationDataModel, SatelliteClusterOutput, LLMConversationMessage
+from data_class.sft_data_models import RawConstellationDataModel, SatelliteClusterOutput, LLMConversationMessage
 
 
 def create_sharegpt_format(instruction: str, input_data: RawConstellationDataModel, output_data: SatelliteClusterOutput) -> LLMConversationMessage:
