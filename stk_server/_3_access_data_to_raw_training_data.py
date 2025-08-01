@@ -237,7 +237,7 @@ def convert_satellite_data(input_data: List[Dict[str, Any]]) -> List[RawConstell
 
 def main():
     # 读取输入文件
-    scenario_index = 6
+    scenario_index = 12
     with open(
             get_data_dir() / f"stk_access_result_data/satellite_target_visibility_data_scenario_{scenario_index}.json",
             "r") as f:

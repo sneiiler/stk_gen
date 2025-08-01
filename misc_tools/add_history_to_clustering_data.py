@@ -189,7 +189,7 @@ def print_sample_data(file_path: str, sample_count: int = 3):
 
 if __name__ == "__main__":
    
-    input_file = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_5.jsonl"
+    input_file = get_data_dir() / "cluster_results_sharegpt_training_data/max_overlap_alg_for_raw_constellation_data_scenario_12.jsonl"
     output_file = get_data_dir() / f"cluster_results_sharegpt_training_data/{input_file.stem}_with_history.jsonl"
 
     # 处理数据
